@@ -1,7 +1,8 @@
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from PyQt5.QtWidgets import QVBoxLayout, QFrame
+from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog
 from scipy.signal import butter, filtfilt
+import os
 
 
 class MplCanvas(FigureCanvas):
@@ -31,7 +32,12 @@ def show_time_range_controls(window):
     window.custom_filter_1_apply.show()
     window.custom_filter_2_input.show()
     window.custom_filter_2_apply.show()
-    window.setFixedSize(1200, 850)
+    window.file_name_input.show()
+    window.save_txt.show()
+    window.save_tsv.show()
+    window.save_xlsx.show()
+    window.save_button.show()
+    window.setFixedSize(1200, 950)
 
 
 def validate_custom_filter(input_field, apply_checkbox):
@@ -167,6 +173,57 @@ def apply_filters(window, data):
         print("Invalid input for Custom Filter 2.")
 
     return data
+
+
+def save_filtered_data(window):
+    file_name = window.file_name_input.text()
+    if not file_name:
+        print("Nazwa pliku nie może być pusta!")
+        return
+
+    formats = []
+    if window.save_txt.isChecked():
+        formats.append("txt")
+    if window.save_tsv.isChecked():
+        formats.append("tsv")
+    if window.save_xlsx.isChecked():
+        formats.append("xlsx")
+
+    if not formats:
+        print("Wybierz co najmniej jeden format zapisu.")
+        return
+
+    directory = QFileDialog.getExistingDirectory(window, "Select Directory")
+    if not directory:
+        return
+
+    save_folder = os.path.join(directory, file_name)
+    os.makedirs(save_folder, exist_ok=True)
+
+    if window.data is None:
+        print("No data to save.")
+        return
+
+    filtered_data = apply_filters(window, window.data.copy())
+
+    if window.current_time_from is not None and window.current_time_to is not None:
+        filtered_data = filtered_data[(filtered_data['time'] >= window.current_time_from) &
+                                      (filtered_data['time'] <= window.current_time_to)]
+
+    if "txt" in formats:
+        txt_file_path = os.path.join(save_folder, f"{file_name}.txt")
+        filtered_data.to_csv(txt_file_path, sep='\t', index=False)
+        print(f"Saved filtered data to {txt_file_path}")
+
+    if "tsv" in formats:
+        tsv_file_path = os.path.join(save_folder, f"{file_name}.tsv")
+        filtered_data.to_csv(tsv_file_path, sep='\t', index=False)
+        print(f"Saved filtered data to {tsv_file_path}")
+
+    if "xlsx" in formats:
+        xlsx_file_path = os.path.join(save_folder, f"{file_name}.xlsx")
+        filtered_data.to_excel(xlsx_file_path, index=False)
+        print(f"Saved filtered data to {xlsx_file_path}")
 
 
 def update_plot(window, data, time_from=None, time_to=None):
