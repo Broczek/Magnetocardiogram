@@ -27,7 +27,7 @@ def load_and_plot_file(window):
             if data is not None:
                 window.data = data
                 update_plot(window, data)
-                window.show_time_range_controls()
+                window.show_controls()
             else:
                 QMessageBox.warning(window, "Warning", "Failed to load data from the file. Please check the file format.")
         except Exception as e:

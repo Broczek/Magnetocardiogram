@@ -1,16 +1,24 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QCheckBox, QLineEdit, QToolTip, QSlider, QSpacerItem, QSizePolicy
-from PyQt5.QtGui import QFont, QIntValidator
+from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QCheckBox, QLineEdit, QSlider, QSpacerItem, QSizePolicy
+from PyQt5.QtGui import QIntValidator, QIcon
 import qtawesome as qta
 from data_processing import load_and_plot_file, update_plot
-from backend import show_time_range_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter
+from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change
 
 
 class MainWindow(QMainWindow):
+    def changeEvent(self, event):
+        if event.type() == QEvent.WindowStateChange or event.type() == QEvent.ActivationChange:
+            state_change(self)
+        super().changeEvent(event)
+
     def __init__(self):
         super().__init__()
 
         self.setWindowTitle("MKG wizualizacja")
+        self.setWindowIcon(QIcon('./images/Icon.png'))
+        self.is_active = True
+
         self.layout = QVBoxLayout()
         self.layout.setAlignment(Qt.AlignTop)
 
@@ -21,8 +29,6 @@ class MainWindow(QMainWindow):
         self.top_layout = QHBoxLayout()
         self.top_layout.setSpacing(0)
         self.top_layout.addStretch()
-
-        QToolTip.setFont(QFont('SansSerif', 10))
 
         self.setStyleSheet("""
         QLabel {
@@ -78,7 +84,7 @@ class MainWindow(QMainWindow):
         """)
         self.load_button.clicked.connect(lambda: load_and_plot_file(self))
         self.layout.addWidget(self.load_button)
-        self.setFixedSize(400, 130)
+        self.setFixedSize(400, 140)
 
         self.range_layout = QVBoxLayout()
         self.time_range_label = QLabel("Specify Time Range (seconds):")
@@ -235,6 +241,55 @@ class MainWindow(QMainWindow):
 
         self.range_and_filters_layout.setContentsMargins(10, 10, 10, 10)
 
+        self.save_options_layout = QVBoxLayout()
+
+        self.file_name_input = QLineEdit()
+        self.file_name_input.setPlaceholderText("File Name")
+        self.file_name_input.setFixedWidth(200)
+        self.save_options_layout.addWidget(self.file_name_input, alignment=Qt.AlignBottom)
+        self.file_name_input.hide()
+
+        self.save_options_layout.setContentsMargins(0, 20, 0, 0)
+
+        self.buttons_layout = QHBoxLayout()
+
+        self.save_txt = QCheckBox(".txt")
+        self.save_txt.setStyleSheet(switch_style)
+        self.save_txt.hide()
+        self.save_tsv = QCheckBox(".tsv")
+        self.save_tsv.setStyleSheet(switch_style)
+        self.save_tsv.hide()
+        self.save_xlsx = QCheckBox(".xlsx")
+        self.save_xlsx.setStyleSheet(switch_style)
+        self.save_xlsx.hide()
+
+        self.buttons_layout.addWidget(self.save_txt, alignment=Qt.AlignCenter)
+        self.buttons_layout.addWidget(self.save_tsv, alignment=Qt.AlignCenter)
+        self.buttons_layout.addWidget(self.save_xlsx, alignment=Qt.AlignCenter)
+        self.save_options_layout.addLayout(self.buttons_layout)
+
+        self.save_button = QPushButton("Save")
+        self.save_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2d89ef;
+                color: white;
+                border-radius: 10px;
+                padding: 5px 15px;
+                border: none;
+                text-align: center;
+            }
+            QPushButton:hover {
+                background-color: #1e70c1;
+            }
+        """)
+        self.save_button.clicked.connect(lambda value: save_data(self))
+        self.save_button.setFixedWidth(200)
+        self.save_options_layout.addWidget(self.save_button, alignment=Qt.AlignBottom)
+        self.save_button.hide()
+
+        self.save_options_layout.setContentsMargins(0, 60, 0, 0)
+
+        self.range_and_filters_layout.addLayout(self.save_options_layout)
         self.layout.addLayout(self.range_and_filters_layout)
 
         self.canvas_layout = QVBoxLayout()
@@ -253,6 +308,7 @@ class MainWindow(QMainWindow):
         self.pan_slider.setMaximum(100)
         self.pan_slider.setValue(0)
         self.pan_slider.setEnabled(False)
+        self.pan_slider.setFixedWidth(200)
         self.pan_slider.valueChanged.connect(lambda value: update_pan(self, value))
         self.slider_layout.addWidget(self.pan_slider, alignment=Qt.AlignLeft)
         self.pan_slider.hide()
@@ -263,112 +319,113 @@ class MainWindow(QMainWindow):
 
         self.slider_layout.addStretch()
 
+        self.zoom_label = QLabel("Zoom")
+        self.slider_layout.addWidget(self.zoom_label, alignment=Qt.AlignRight)
+        self.zoom_label.hide()
+
         self.zoom_slider = QSlider(Qt.Horizontal)
         self.zoom_slider.setMinimum(1)
         self.zoom_slider.setMaximum(100)
         self.zoom_slider.setValue(1)
+        self.zoom_slider.setFixedWidth(200)
         self.zoom_slider.valueChanged.connect(lambda value: update_zoom(self, value))
-        self.slider_layout.addWidget(self.zoom_slider, alignment=Qt.AlignRight)
+        self.slider_layout.addWidget(self.zoom_slider, alignment=Qt.AlignLeft)
         self.zoom_slider.hide()
-
-        self.zoom_label = QLabel("Zoom")
-        self.slider_layout.addWidget(self.zoom_label, alignment=Qt.AlignLeft)
-        self.zoom_label.hide()
 
         self.layout.addLayout(self.slider_layout)
 
-    def show_time_range_controls(self):
-        show_time_range_controls(self)
+    def show_controls(self):
+        show_controls(self)
 
     def change_theme(self, state):
         if state == 2:
             self.setStyleSheet("""
-                        QMainWindow {
-                            background-color: #2c2c2c;
-                        }
-                        QLabel {
-                            color: #f0f0f0;
-                            font-size: 14px;
-                        }
-                        QPushButton {
-                            background-color: #555;
-                            color: white;
-                            border-radius: 15px;
-                            padding: 10px 20px;
-                            border: none;
-                            text-align: center;
-                            padding-left: 20px;
-                        }
-                        QPushButton:hover {
-                            background-color: #333;
-                        }
-                        QCheckBox {
-                            color: #f0f0f0;
-                        }
-                        QLineEdit {
-                            background-color: #444;
-                            color: #f0f0f0;
-                            border: 1px solid #555;
-                            border-radius: 10px;
-                            padding: 5px;
-                            size: 10px;
-                        }
-                        QLineEdit:focus {
-                            border: 1px solid #888;
-                        }
-                    """)
+                QMainWindow {
+                    background-color: #2c2c2c;
+                }
+                QLabel {
+                    color: #f0f0f0;
+                    font-size: 14px;
+                }
+                QPushButton {
+                    background-color: #555;
+                    color: white;
+                    border-radius: 15px;
+                    padding: 10px 20px;
+                    border: none;
+                    text-align: center;
+                    padding-left: 20px;
+                }
+                QPushButton:hover {
+                    background-color: #333;
+                }
+                QCheckBox {
+                    color: #f0f0f0;
+                }
+                QLineEdit {
+                    background-color: #444;
+                    color: #f0f0f0;
+                    border: 1px solid #555;
+                    border-radius: 10px;
+                    padding: 5px;
+                    size: 10px;
+                }
+                QLineEdit:focus {
+                    border: 1px solid #888;
+                }
+            """)
             if self.canvas_frame:
                 self.canvas_frame.setStyleSheet("""
-                            QFrame {
-                                border: 1px solid #888888;
-                                border-radius: 15px;
-                                background-color: #2c2c2c;
-                            }
-                        """)
+                    QFrame {
+                        border: 1px solid #888888;
+                        border-radius: 15px;
+                        background-color: #2c2c2c;
+                    }
+                """)
         else:
             self.setStyleSheet("""
-                        QMainWindow {
-                            background-color: #f0f0f0;
-                        }
-                        QLabel {
-                            color: #333;
-                            font-size: 14px;
-                        }
-                        QPushButton {
-                            background-color: #2d89ef;
-                            color: white;
-                            border-radius: 15px;
-                            padding: 30px 20px;
-                            border: none;
-                            text-align: center;
-                            padding-left: 20px;
-                        }
-                        QPushButton:hover {
-                            background-color: #1e70c1;
-                        }
-                        QLineEdit {
-                            background-color: white;
-                            color: #333;
-                            border: 1px solid #ccc;
-                            border-radius: 10px;
-                            padding: 5px;
-                            width: 10px;
-                        }
-                            QLineEdit:focus {
-                            border: 1px solid #2d89ef;
-                        }
-                        QCheckBox {
-                            color: #333;
-                        }
-                    """)
+                QMainWindow {
+                background-color: #f0f0f0;
+                }
+                QLabel {
+                    color: #333;
+                    font-size: 14px;
+                }
+                QPushButton {
+                    background-color: #2d89ef;
+                    color: white;
+                    border-radius: 15px;
+                    padding: 30px 20px;
+                    border: none;
+                    text-align: center;
+                    padding-left: 20px;
+                }
+                QPushButton:hover {
+                    background-color: #1e70c1;
+                }
+                QLineEdit {
+                    background-color: white;
+                    color: #333;
+                    border: 1px solid #ccc;
+                    border-radius: 10px;
+                    padding: 5px;
+                    width: 10px;
+                }
+                    QLineEdit:focus {
+                    border: 1px solid #2d89ef;
+                }
+                QCheckBox {
+                    color: #333;
+                }
+            """)
             if self.canvas_frame:
                 self.canvas_frame.setStyleSheet("""
-                            QFrame {
-                                border: 1px solid #2d89ef;
-                                border-radius: 15px;
-                                background-color: white;
-                            }
-                        """)
+                    QFrame {
+                        border: 1px solid #2d89ef;
+                        border-radius: 15px;
+                        background-color: white;
+                    }
+                """)
 
         if self.current_time_from is not None and self.current_time_to is not None:
             filtered_data = self.data[(self.data['time'] >= self.current_time_from) & (self.data['time'] <= self.current_time_to)]

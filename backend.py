@@ -1,7 +1,10 @@
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from PyQt5.QtWidgets import QVBoxLayout, QFrame
+from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog
+from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import Qt
 from scipy.signal import butter, filtfilt
+import os
 
 
 class MplCanvas(FigureCanvas):
@@ -12,7 +15,14 @@ class MplCanvas(FigureCanvas):
         self.setStyleSheet("background-color: transparent;")
 
 
-def show_time_range_controls(window):
+def state_change(window):
+    if window.isActiveWindow():
+        window.setWindowIcon(QIcon('./images/Icon.png'))
+    else:
+        window.setWindowIcon(QIcon('./images/Icon_black.png'))
+
+
+def show_controls(window):
     window.time_range_label.show()
     window.time_from_input.show()
     window.time_to_input.show()
@@ -31,7 +41,12 @@ def show_time_range_controls(window):
     window.custom_filter_1_apply.show()
     window.custom_filter_2_input.show()
     window.custom_filter_2_apply.show()
-    window.setFixedSize(1200, 850)
+    window.file_name_input.show()
+    window.save_txt.show()
+    window.save_tsv.show()
+    window.save_xlsx.show()
+    window.save_button.show()
+    window.setFixedSize(1200, 950)
 
 
 def validate_custom_filter(input_field, apply_checkbox):
@@ -101,17 +116,17 @@ def apply_time_range(window):
             pass
 
 
-def lowpass_filter(data, cutoff=0.1, fs=1.0, order=5):
-    nyq = 0.5 * fs
-    normal_cutoff = cutoff / nyq
+def lowpass_filter(data):
+    normal_cutoff = 0.018
+    order = 5
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
     y = filtfilt(b, a, data)
     return y
 
 
-def highpass_filter(data, cutoff=0.1, fs=1.0, order=5):
-    nyq = 0.5 * fs
-    normal_cutoff = cutoff / nyq
+def highpass_filter(data):
+    normal_cutoff = 0.002
+    order = 5
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
     y = filtfilt(b, a, data)
     return y
@@ -169,6 +184,57 @@ def apply_filters(window, data):
     return data
 
 
+def save_data(window):
+    file_name = window.file_name_input.text()
+    if not file_name:
+        print("Nazwa pliku nie może być pusta!")
+        return
+
+    formats = []
+    if window.save_txt.isChecked():
+        formats.append("txt")
+    if window.save_tsv.isChecked():
+        formats.append("tsv")
+    if window.save_xlsx.isChecked():
+        formats.append("xlsx")
+
+    if not formats:
+        print("Wybierz co najmniej jeden format zapisu.")
+        return
+
+    directory = QFileDialog.getExistingDirectory(window, "Select Directory")
+    if not directory:
+        return
+
+    save_folder = os.path.join(directory, file_name)
+    os.makedirs(save_folder, exist_ok=True)
+
+    if window.data is None:
+        print("No data to save.")
+        return
+
+    filtered_data = apply_filters(window, window.data.copy())
+
+    if window.current_time_from is not None and window.current_time_to is not None:
+        filtered_data = filtered_data[(filtered_data['time'] >= window.current_time_from) &
+                                      (filtered_data['time'] <= window.current_time_to)]
+
+    if "txt" in formats:
+        txt_file_path = os.path.join(save_folder, f"{file_name}.txt")
+        filtered_data.to_csv(txt_file_path, sep='\t', index=False)
+        print(f"Saved filtered data to {txt_file_path}")
+
+    if "tsv" in formats:
+        tsv_file_path = os.path.join(save_folder, f"{file_name}.tsv")
+        filtered_data.to_csv(tsv_file_path, sep='\t', index=False)
+        print(f"Saved filtered data to {tsv_file_path}")
+
+    if "xlsx" in formats:
+        xlsx_file_path = os.path.join(save_folder, f"{file_name}.xlsx")
+        filtered_data.to_excel(xlsx_file_path, index=False)
+        print(f"Saved filtered data to {xlsx_file_path}")
+
+
 def update_plot(window, data, time_from=None, time_to=None):
     if data is not None:
         filtered_data = apply_filters(window, data.copy())
@@ -207,7 +273,6 @@ def update_plot(window, data, time_from=None, time_to=None):
             window.canvas = MplCanvas(window.canvas_frame, width=8, height=6, dpi=100)
             layout_canvas.addWidget(window.canvas)
             window.canvas_frame.setLayout(layout_canvas)
-
             window.canvas_layout.addWidget(window.canvas_frame)
             print("Płótno wykresu zostało stworzone i dodane do kontenera.")
 
@@ -265,7 +330,7 @@ def update_zoom(window, value):
     if window.current_time_from is None or window.current_time_to is None:
         return
 
-    zoom_factor = value / 100.0
+    zoom_factor = (101 - value) / 100
     data_range = window.current_time_to - window.current_time_from
     visible_range = data_range * zoom_factor
 
@@ -279,15 +344,16 @@ def update_zoom(window, value):
 
     window.canvas.axes.set_xlim(new_time_from, new_time_to)
 
-    visible_data = window.data[(window.data['time'] >= new_time_from) &
-                               (window.data['time'] <= new_time_to)]
+    filtered_data = apply_filters(window, window.data.copy())
+    visible_data = filtered_data[(filtered_data['time'] >= new_time_from) &
+                                 (filtered_data['time'] <= new_time_to)]
 
     if not visible_data.empty:
         min_y = visible_data['gradient.B'].min()
         max_y = visible_data['gradient.B'].max()
         window.canvas.axes.set_ylim(min_y, max_y)
 
-    if value < 100:
+    if value < 101:
         window.pan_slider.setEnabled(True)
     else:
         window.pan_slider.setEnabled(False)
@@ -300,9 +366,9 @@ def update_pan(window, value):
         return
 
     pan_factor = value / 100.0
+    current_xlim = window.canvas.axes.get_xlim()
+    visible_range = current_xlim[1] - current_xlim[0]
     data_range = window.current_time_to - window.current_time_from
-    zoom_factor = window.zoom_slider.value() / 100.0
-    visible_range = data_range * zoom_factor
 
     pan_offset = pan_factor * (data_range - visible_range)
     new_time_from = window.current_time_from + pan_offset
@@ -310,8 +376,9 @@ def update_pan(window, value):
 
     window.canvas.axes.set_xlim(new_time_from, new_time_to)
 
-    visible_data = window.data[(window.data['time'] >= new_time_from) &
-                               (window.data['time'] <= new_time_to)]
+    filtered_data = apply_filters(window, window.data.copy())
+    visible_data = filtered_data[(filtered_data['time'] >= new_time_from) &
+                                 (filtered_data['time'] <= new_time_to)]
 
     if not visible_data.empty:
         min_y = visible_data['gradient.B'].min()
