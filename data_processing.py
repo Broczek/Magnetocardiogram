@@ -25,6 +25,7 @@ def load_and_plot_file(window):
         try:
             data = load_data(file_path)
             if data is not None:
+                window.original_data = data.copy()
                 window.data = data
                 update_plot(window, data)
                 window.show_controls()
@@ -33,3 +34,4 @@ def load_and_plot_file(window):
         except Exception as e:
             QMessageBox.critical(window, "Error", f"Error reading file: {e}")
             print(f"Error reading file: {e}")
+

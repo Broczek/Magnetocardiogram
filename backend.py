@@ -1,10 +1,9 @@
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog
+from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog, QApplication
 from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import Qt
 from scipy.signal import butter, filtfilt
-import os
+import os, time
 
 
 class MplCanvas(FigureCanvas):
@@ -116,8 +115,17 @@ def apply_time_range(window):
             pass
 
 
+def bandpass_filter(data, lowcut, highcut, fs=1000.0, order=5):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = butter(order, [low, high], btype='band')
+    y = filtfilt(b, a, data)
+    return y
+
+
 def lowpass_filter(data):
-    normal_cutoff = 0.018
+    normal_cutoff = 0.08
     order = 5
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
     y = filtfilt(b, a, data)
@@ -125,7 +133,7 @@ def lowpass_filter(data):
 
 
 def highpass_filter(data):
-    normal_cutoff = 0.002
+    normal_cutoff = 0.003
     order = 5
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
     y = filtfilt(b, a, data)
@@ -142,6 +150,64 @@ def notch_filter(data, freq, fs=1000.0, Q=30.0):
     b, a = iirnotch(w0, Q)
     y = filtfilt(b, a, data)
     return y
+
+
+def update_bandpass_filter(window):
+    if not hasattr(window, 'original_data') or window.original_data is None:
+        print("Brak oryginalnych danych. Filtracja nie jest możliwa.")
+        return
+    window.filtered_data_no_bandpass = apply_filters(window, window.original_data.copy())
+    if window.bandpass_apply.isChecked():
+        lowcut, highcut = window.bandpass_slider.value()
+        print(f"Applying bandpass filter: {lowcut}Hz - {highcut}Hz")
+        window.filtered_data_with_bandpass = window.filtered_data_no_bandpass.copy()
+        window.filtered_data_with_bandpass['gradient.B'] = bandpass_filter(window.filtered_data_with_bandpass['gradient.B'], lowcut, highcut)
+        window.data['gradient.B'] = window.filtered_data_with_bandpass['gradient.B']
+    else:
+        window.data['gradient.B'] = window.filtered_data_no_bandpass['gradient.B']
+
+    update_plot(window, window.data)
+
+
+def handle_bandpass_apply_toggle(window):
+    if window.bandpass_apply.isChecked():
+        update_bandpass_filter(window)
+    else:
+        print("Bandpass filter off. Resetting to filtered state without bandpass.")
+        window.data['gradient.B'] = window.filtered_data_no_bandpass['gradient.B']
+        update_plot(window, window.data)
+
+
+def update_bandpass_slider(window):
+    if window.bandpass_apply.isChecked():
+        update_bandpass_filter(window)
+    else:
+        print("Bandpass filter is off. Slider movement will not affect the plot.")
+
+
+def update_slider_labels(window):
+    low_value, high_value = window.bandpass_slider.value()
+    try:
+        window.bandpass_slider._min_label.setValue(low_value)
+        if high_value <= 40:
+            window.bandpass_slider._max_label.setValue(40)
+            time.sleep(0.1)
+            QApplication.processEvents()
+        else:
+            window.bandpass_slider._max_label.setValue(high_value)
+
+    except AttributeError as e:
+        print(f"Błąd aktualizacji etykiet: {e}")
+
+
+def validate_bandpass_values(window):
+    low_value, high_value = window.bandpass_slider.value()
+
+    if high_value < 40:
+        high_value = 40
+        window.bandpass_slider.setValue((low_value, high_value))
+
+    update_slider_labels(window)
 
 
 def apply_filters(window, data):
