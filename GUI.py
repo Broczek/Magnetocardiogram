@@ -3,7 +3,8 @@ from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, 
 from PyQt5.QtGui import QIntValidator, QIcon
 import qtawesome as qta
 from data_processing import load_and_plot_file, update_plot
-from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change
+from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change, handle_bandpass_apply_toggle, update_bandpass_slider, validate_bandpass_values
+from qtrangeslider import QLabeledDoubleRangeSlider
 
 
 class MainWindow(QMainWindow):
@@ -15,6 +16,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.dark_mode = None
         self.setWindowTitle("MKG wizualizacja")
         self.setWindowIcon(QIcon('./images/Icon.png'))
         self.is_active = True
@@ -165,31 +167,75 @@ class MainWindow(QMainWindow):
 
         self.custom_filters_layout = QVBoxLayout()
 
+        self.custom_filter1_layout = QHBoxLayout()
         self.custom_filter_1_input = QLineEdit()
         self.custom_filter_1_input.setPlaceholderText("1-999Hz")
-        self.custom_filter_1_input.setFixedWidth(85)
+        self.custom_filter_1_input.setFixedWidth(100)
         self.custom_filter_1_validator = QIntValidator(1, 999, self)
         self.custom_filter_1_input.setValidator(self.custom_filter_1_validator)
         self.custom_filter_1_input.textChanged.connect(lambda: validate_custom_filter(self.custom_filter_1_input, self.custom_filter_1_apply))
-        self.custom_filters_layout.addWidget(self.custom_filter_1_input, alignment=Qt.AlignTop)
+        self.custom_filter1_layout.addWidget(self.custom_filter_1_input, alignment=Qt.AlignTop)
 
         self.custom_filter_1_apply = QCheckBox("Apply")
         self.custom_filter_1_apply.setEnabled(False)
         self.custom_filter_1_apply.stateChanged.connect(lambda: update_plot(self, self.data))
-        self.custom_filters_layout.addWidget(self.custom_filter_1_apply, alignment=Qt.AlignTop)
+        self.custom_filter1_layout.addWidget(self.custom_filter_1_apply, alignment=Qt.AlignLeft)
 
+        self.custom_filter2_layout = QHBoxLayout()
         self.custom_filter_2_input = QLineEdit()
         self.custom_filter_2_input.setPlaceholderText("1-999Hz")
-        self.custom_filter_2_input.setFixedWidth(85)
+        self.custom_filter_2_input.setFixedWidth(100)
         self.custom_filter_2_validator = QIntValidator(1, 999, self)
         self.custom_filter_2_input.setValidator(self.custom_filter_2_validator)
         self.custom_filter_2_input.textChanged.connect(lambda: validate_custom_filter(self.custom_filter_2_input, self.custom_filter_2_apply))
-        self.custom_filters_layout.addWidget(self.custom_filter_2_input, alignment=Qt.AlignTop)
+        self.custom_filter2_layout.addWidget(self.custom_filter_2_input, alignment=Qt.AlignTop)
 
         self.custom_filter_2_apply = QCheckBox("Apply")
         self.custom_filter_2_apply.setEnabled(False)
         self.custom_filter_2_apply.stateChanged.connect(lambda: update_plot(self, self.data))
-        self.custom_filters_layout.addWidget(self.custom_filter_2_apply, alignment=Qt.AlignTop)
+        self.custom_filter2_layout.addWidget(self.custom_filter_2_apply, alignment=Qt.AlignLeft)
+
+        self.bandpass_layout = QHBoxLayout()
+        self.bandpass_slider = QLabeledDoubleRangeSlider(Qt.Horizontal)
+        self.bandpass_slider.setRange(1, 400)
+        self.bandpass_slider.setValue((20, 200))
+        self.bandpass_slider.setFixedWidth(100)
+        self.bandpass_slider.setSingleStep(1)
+        self.bandpass_slider.setDecimals(0)
+
+        self.bandpass_slider.setStyleSheet("""
+            QSlider{
+                qproperty-barColor: #74aeed;
+            }
+            QSlider::groove:horizontal {
+                height: 8px;
+                background: #ddd;
+                border-radius: 4px;
+            }
+            QSlider::handle:horizontal {
+                background: #2d89ef;
+                width: 15px;
+                height: 10px;
+                margin: -5px 0;
+                border-radius: 7px;
+            }
+            QSlider::handle:horizontal:hover {
+                background: #1e70c1;
+            }
+        """)
+
+        self.bandpass_slider.valueChanged.connect(lambda: validate_bandpass_values(self))
+        self.bandpass_layout.addWidget(self.bandpass_slider, alignment=Qt.AlignTop)
+        self.bandpass_slider.setEdgeLabelMode(None)
+
+        self.bandpass_apply = QCheckBox("Apply")
+        self.bandpass_apply.stateChanged.connect(lambda: handle_bandpass_apply_toggle(self))
+        self.bandpass_apply.setFixedHeight(70)
+        self.bandpass_layout.addWidget(self.bandpass_apply, alignment=Qt.AlignTop)
+
+        self.custom_filters_layout.addLayout(self.custom_filter1_layout)
+        self.custom_filters_layout.addLayout(self.custom_filter2_layout)
+        self.custom_filters_layout.addLayout(self.bandpass_layout)
 
         self.filters_label.hide()
         self.lowpass_filter.hide()
@@ -232,6 +278,7 @@ class MainWindow(QMainWindow):
         self.filter_150hz.setStyleSheet(switch_style)
         self.custom_filter_1_apply.setStyleSheet(switch_style)
         self.custom_filter_2_apply.setStyleSheet(switch_style)
+        self.bandpass_apply.setStyleSheet(switch_style)
 
         spacer = QSpacerItem(30, 0, QSizePolicy.MinimumExpanding, QSizePolicy.Minimum)
         self.range_and_filters_layout.addItem(spacer)
@@ -373,6 +420,11 @@ class MainWindow(QMainWindow):
                 QLineEdit:focus {
                     border: 1px solid #888;
                 }
+                QDoubleSpinBox, QSpinBox {
+                    background: transparent;
+                    border: none;
+                    color: #f0f0f0;
+                }
             """)
             if self.canvas_frame:
                 self.canvas_frame.setStyleSheet("""
@@ -385,7 +437,7 @@ class MainWindow(QMainWindow):
         else:
             self.setStyleSheet("""
                 QMainWindow {
-                background-color: #f0f0f0;
+                    background-color: #f0f0f0;
                 }
                 QLabel {
                     color: #333;
@@ -411,10 +463,15 @@ class MainWindow(QMainWindow):
                     padding: 5px;
                     width: 10px;
                 }
-                    QLineEdit:focus {
+                QLineEdit:focus {
                     border: 1px solid #2d89ef;
                 }
                 QCheckBox {
+                    color: #333;
+                }
+                QDoubleSpinBox, QSpinBox {
+                    background: transparent;
+                    border: none;
                     color: #333;
                 }
             """)
