@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, 
 from PyQt5.QtGui import QIntValidator, QIcon
 import qtawesome as qta
 from data_processing import load_and_plot_file, update_plot
-from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change, handle_bandpass_apply_toggle, update_bandpass_slider, validate_bandpass_values
+from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change, handle_bandpass_apply_toggle, validate_bandpass_values, handle_filter_toggle
 from qtrangeslider import QLabeledDoubleRangeSlider
 
 
@@ -146,23 +146,23 @@ class MainWindow(QMainWindow):
         self.filters_defined_layout.addWidget(self.filters_label, alignment=Qt.AlignTop)
 
         self.lowpass_filter = QCheckBox("Lowpass")
-        self.lowpass_filter.stateChanged.connect(lambda: update_plot(self, self.data))
+        self.lowpass_filter.stateChanged.connect(lambda: handle_filter_toggle(self, 'lowpass'))
         self.filters_defined_layout.addWidget(self.lowpass_filter, alignment=Qt.AlignTop)
 
         self.highpass_filter = QCheckBox("Highpass")
-        self.highpass_filter.stateChanged.connect(lambda: update_plot(self, self.data))
+        self.highpass_filter.stateChanged.connect(lambda: handle_filter_toggle(self, 'highpass'))
         self.filters_defined_layout.addWidget(self.highpass_filter, alignment=Qt.AlignTop)
 
         self.filter_50hz = QCheckBox("50Hz")
-        self.filter_50hz.stateChanged.connect(lambda: update_plot(self, self.data))
+        self.filter_50hz.stateChanged.connect(lambda: handle_filter_toggle(self, '50hz'))
         self.filters_defined_layout.addWidget(self.filter_50hz, alignment=Qt.AlignTop)
 
         self.filter_100hz = QCheckBox("100Hz")
-        self.filter_100hz.stateChanged.connect(lambda: update_plot(self, self.data))
+        self.filter_100hz.stateChanged.connect(lambda: handle_filter_toggle(self, '100hz'))
         self.filters_defined_layout.addWidget(self.filter_100hz, alignment=Qt.AlignTop)
 
         self.filter_150hz = QCheckBox("150Hz")
-        self.filter_150hz.stateChanged.connect(lambda: update_plot(self, self.data))
+        self.filter_150hz.stateChanged.connect(lambda: handle_filter_toggle(self, '150hz'))
         self.filters_defined_layout.addWidget(self.filter_150hz, alignment=Qt.AlignTop)
 
         self.custom_filters_layout = QVBoxLayout()
@@ -178,7 +178,7 @@ class MainWindow(QMainWindow):
 
         self.custom_filter_1_apply = QCheckBox("Apply")
         self.custom_filter_1_apply.setEnabled(False)
-        self.custom_filter_1_apply.stateChanged.connect(lambda: update_plot(self, self.data))
+        self.custom_filter_1_apply.stateChanged.connect(lambda: handle_filter_toggle(self, 'custom_filter_1'))
         self.custom_filter1_layout.addWidget(self.custom_filter_1_apply, alignment=Qt.AlignLeft)
 
         self.custom_filter2_layout = QHBoxLayout()
@@ -192,7 +192,7 @@ class MainWindow(QMainWindow):
 
         self.custom_filter_2_apply = QCheckBox("Apply")
         self.custom_filter_2_apply.setEnabled(False)
-        self.custom_filter_2_apply.stateChanged.connect(lambda: update_plot(self, self.data))
+        self.custom_filter_2_apply.stateChanged.connect(lambda: handle_filter_toggle(self, 'custom_filter_2'))
         self.custom_filter2_layout.addWidget(self.custom_filter_2_apply, alignment=Qt.AlignLeft)
 
         self.bandpass_layout = QHBoxLayout()
