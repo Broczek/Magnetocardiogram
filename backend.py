@@ -2,7 +2,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog, QApplication
 from PyQt5.QtGui import QIcon
-from scipy.signal import butter, filtfilt
+from scipy.signal import butter, filtfilt, iirnotch
 import os, time
 
 
@@ -140,14 +140,17 @@ def highpass_filter(data):
     return y
 
 
-def notch_filter(data, freq, fs=1000.0, Q=30.0):
-    from scipy.signal import iirnotch
+def notch_filter(data, freq, fs=1000.0, bandwidth=5):
     nyq = 0.5 * fs
-    w0 = freq / nyq
-    if w0 >= 1:
-        raise ValueError(f"Częstotliwość filtru {freq}Hz przekracza Nyquista dla fs={fs}Hz.")
 
-    b, a = iirnotch(w0, Q)
+    low = (freq - bandwidth) / nyq
+    high = (freq + bandwidth) / nyq
+
+    if low < 0 or high > 1:
+        raise ValueError(f"Częstotliwość {freq}Hz z pasmem {bandwidth}Hz przekracza Nyquista dla fs={fs}Hz.")
+
+    b, a = butter(N=2, Wn=[low, high], btype='bandstop')
+
     y = filtfilt(b, a, data)
     return y
 
@@ -288,11 +291,16 @@ def save_data(window):
     save_folder = os.path.join(directory, file_name)
     os.makedirs(save_folder, exist_ok=True)
 
-    if window.data is None:
-        print("No data to save.")
+    if window.data is None or not hasattr(window, 'original_data'):
+        print("Brak danych do zapisania.")
         return
 
-    filtered_data = apply_filters(window, window.data.copy())
+    filtered_data = apply_filters(window, window.original_data.copy())
+
+    if window.bandpass_apply.isChecked():
+        lowcut, highcut = window.bandpass_slider.value()
+        print(f"Applying bandpass filter: {lowcut}Hz - {highcut}Hz for saving data.")
+        filtered_data['gradient.B'] = bandpass_filter(filtered_data['gradient.B'], lowcut, highcut)
 
     if window.current_time_from is not None and window.current_time_to is not None:
         filtered_data = filtered_data[(filtered_data['time'] >= window.current_time_from) &
