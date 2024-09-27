@@ -178,26 +178,23 @@ def handle_bandpass_apply_toggle(window):
         update_plot(window, window.data)
 
 
-def update_bandpass_slider(window):
+def update_slider_labels(window):
     if window.bandpass_apply.isChecked():
+        low_value, high_value = window.bandpass_slider.value()
+        try:
+            window.bandpass_slider._min_label.setValue(low_value)
+            if high_value <= 40:
+                window.bandpass_slider._max_label.setValue(40)
+                time.sleep(0.1)
+                QApplication.processEvents()
+            else:
+                window.bandpass_slider._max_label.setValue(high_value)
+
+        except AttributeError as e:
+            print(f"Błąd aktualizacji etykiet: {e}")
         update_bandpass_filter(window)
     else:
         print("Bandpass filter is off. Slider movement will not affect the plot.")
-
-
-def update_slider_labels(window):
-    low_value, high_value = window.bandpass_slider.value()
-    try:
-        window.bandpass_slider._min_label.setValue(low_value)
-        if high_value <= 40:
-            window.bandpass_slider._max_label.setValue(40)
-            time.sleep(0.1)
-            QApplication.processEvents()
-        else:
-            window.bandpass_slider._max_label.setValue(high_value)
-
-    except AttributeError as e:
-        print(f"Błąd aktualizacji etykiet: {e}")
 
 
 def validate_bandpass_values(window):
@@ -248,6 +245,22 @@ def apply_filters(window, data):
         print("Invalid input for Custom Filter 2.")
 
     return data
+
+
+def toggle_bandpass_apply_silently(window):
+    if not window.bandpass_apply.isChecked():
+        window.bandpass_apply.setChecked(True)
+        window.bandpass_apply.setChecked(False)
+
+
+def handle_filter_toggle(window, filter_name):
+    if not window.bandpass_apply.isChecked():
+        toggle_bandpass_apply_silently(window)
+
+        window.filtered_data_no_bandpass = apply_filters(window, window.original_data.copy())
+        window.data['gradient.B'] = window.filtered_data_no_bandpass['gradient.B']
+
+    update_plot(window, window.data)
 
 
 def save_data(window):
