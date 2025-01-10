@@ -5,6 +5,8 @@ import qtawesome as qta
 from data_processing import load_and_plot_file, update_plot
 from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change, handle_bandpass_apply_toggle, validate_bandpass_values, handle_filter_toggle
 from qtrangeslider import QLabeledDoubleRangeSlider
+from live_visualization import RealTimePlotWindow, reset_com_port
+import gc
 
 
 class MainWindow(QMainWindow):
@@ -68,25 +70,55 @@ class MainWindow(QMainWindow):
         self.file_path_label = QLabel("No file selected")
         self.layout.addWidget(self.file_path_label, alignment=Qt.AlignLeft)
 
-        self.load_button = QPushButton(" Load and Plot Data")
-        self.load_button.setIcon(qta.icon('fa5s.file-import', color='white'))
-        self.load_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2d89ef;
-                color: white;
-                border-radius: 15px;
-                padding: 10px 20px;
-                border: none;
-                text-align: center;
-                padding-left: 20px;
-            }
-            QPushButton:hover {
-                background-color: #1e70c1;
-            }
-        """)
-        self.load_button.clicked.connect(lambda: load_and_plot_file(self))
-        self.layout.addWidget(self.load_button)
-        self.setFixedSize(400, 140)
+        # Kontener na przyciski
+        self.start_layout = QHBoxLayout()
+
+        # Przycisk analizy z pliku
+        self.file_analysis_button = QPushButton("Analiza danych z pliku")
+        self.file_analysis_button.setIcon(qta.icon('fa5s.file-import', color='white'))
+        self.file_analysis_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #2d89ef;
+                        color: white;
+                        border-radius: 15px;
+                        padding: 10px 20px;
+                        border: none;
+                        text-align: center;
+                        padding-left: 20px;
+                    }
+                    QPushButton:hover {
+                        background-color: #1e70c1;
+                    }
+                """)
+        self.file_analysis_button.clicked.connect(self.start_file_analysis)
+        self.start_layout.addWidget(self.file_analysis_button)
+
+        # Przycisk analizy w czasie rzeczywistym
+        self.real_time_analysis_button = QPushButton("Analiza danych w czasie rzeczywistym")
+        self.real_time_analysis_button.setIcon(qta.icon('fa5s.chart-line', color='white'))
+        self.real_time_analysis_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #2d89ef;
+                        color: white;
+                        border-radius: 15px;
+                        padding: 10px 20px;
+                        border: none;
+                        text-align: center;
+                        padding-left: 20px;
+                    }
+                    QPushButton:hover {
+                        background-color: #1e70c1;
+                    }
+                """)
+        self.real_time_analysis_button.clicked.connect(self.start_real_time_analysis)
+        self.start_layout.addWidget(self.real_time_analysis_button)
+
+        self.layout.addLayout(self.start_layout)
+
+        # Flaga kontroli otwartego okna analizy w czasie rzeczywistym
+        self.real_time_window = None
+
+        self.setFixedSize(500, 150)
 
         self.range_layout = QVBoxLayout()
         self.time_range_label = QLabel("Specify Time Range (seconds):")
@@ -334,7 +366,7 @@ class MainWindow(QMainWindow):
         self.save_options_layout.addWidget(self.save_button, alignment=Qt.AlignBottom)
         self.save_button.hide()
 
-        self.save_options_layout.setContentsMargins(0, 60, 0, 0)
+        self.save_options_layout.setContentsMargins(0, 0, 0, 0)
 
         self.range_and_filters_layout.addLayout(self.save_options_layout)
         self.layout.addLayout(self.range_and_filters_layout)
@@ -380,6 +412,24 @@ class MainWindow(QMainWindow):
         self.zoom_slider.hide()
 
         self.layout.addLayout(self.slider_layout)
+
+    def start_file_analysis(self):
+        """Przełącz do trybu analizy danych z pliku."""
+        load_and_plot_file(self)
+
+    def start_real_time_analysis(self):
+        if not hasattr(self, 'real_time_window') or self.real_time_window is None:
+            self.real_time_window = RealTimePlotWindow()
+            self.real_time_window.closed.connect(self.reset_real_time_window)  # Połącz sygnał z metodą
+            self.real_time_window.show()
+        else:
+            print("Okno analizy w czasie rzeczywistym jest już otwarte.")
+
+    def reset_real_time_window(self):
+        print("Resetowanie flagi real_time_window.")
+        self.real_time_window = None
+        import gc
+        gc.collect()  # Wymuś zwolnienie pamięci
 
     def show_controls(self):
         show_controls(self)

@@ -435,10 +435,13 @@ def update_zoom(window, value):
     visible_data = filtered_data[(filtered_data['time'] >= new_time_from) &
                                  (filtered_data['time'] <= new_time_to)]
 
+    min_y = visible_data['gradient.B'].min()
+    max_y = visible_data['gradient.B'].max()
+
     if not visible_data.empty:
-        min_y = visible_data['gradient.B'].min()
-        max_y = visible_data['gradient.B'].max()
         window.canvas.axes.set_ylim(min_y, max_y)
+
+    print(min_y, max_y)
 
     if value < 101:
         window.pan_slider.setEnabled(True)
@@ -467,9 +470,12 @@ def update_pan(window, value):
     visible_data = filtered_data[(filtered_data['time'] >= new_time_from) &
                                  (filtered_data['time'] <= new_time_to)]
 
+    min_y = visible_data['gradient.B'].min()
+    max_y = visible_data['gradient.B'].max()
+
     if not visible_data.empty:
-        min_y = visible_data['gradient.B'].min()
-        max_y = visible_data['gradient.B'].max()
         window.canvas.axes.set_ylim(min_y, max_y)
+
+    print(min_y, max_y)
 
     window.canvas.draw()
