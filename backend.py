@@ -1,9 +1,10 @@
+import os
+import time
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog, QApplication
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog, QApplication
-from PyQt5.QtGui import QIcon
-from scipy.signal import butter, filtfilt, iirnotch
-import os, time
+from scipy.signal import butter, filtfilt, lfilter
 
 
 class MplCanvas(FigureCanvas):
@@ -124,34 +125,22 @@ def bandpass_filter(data, lowcut, highcut, fs=1000.0, order=5):
     return y
 
 
-def lowpass_filter(data):
-    normal_cutoff = 0.08
-    order = 5
+def lowpass_filter(data, normal_cutoff=0.08, order=5):
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    y = filtfilt(b, a, data)
+    y = lfilter(b, a, data)
     return y
 
-
-def highpass_filter(data):
-    normal_cutoff = 0.003
-    order = 5
+def highpass_filter(data, normal_cutoff=0.003, order=5):
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
-    y = filtfilt(b, a, data)
+    y = lfilter(b, a, data)
     return y
 
-
-def notch_filter(data, freq, fs=1000.0, bandwidth=5):
+def notch_filter(data, freq=50, fs=480, bandwidth=5):
     nyq = 0.5 * fs
-
-    low = (freq - bandwidth) / nyq
-    high = (freq + bandwidth) / nyq
-
-    if low < 0 or high > 1:
-        raise ValueError(f"Częstotliwość {freq}Hz z pasmem {bandwidth}Hz przekracza Nyquista dla fs={fs}Hz.")
-
+    low = (freq - bandwidth/2) / nyq
+    high = (freq + bandwidth/2) / nyq
     b, a = butter(N=2, Wn=[low, high], btype='bandstop')
-
-    y = filtfilt(b, a, data)
+    y = lfilter(b, a, data)
     return y
 
 

@@ -1,57 +1,60 @@
 import serial
-import struct
+from tio_protocol import TIOProtocol, TL_PTYPE_STREAM0
+from slip import SLIP_END_CHAR, decode
 import time
 
+def initialize_sensor(port="COM6", baudrate=115200, data_queue=None):
+    try:
+        print("Inicjalizacja połączenia...")
 
-class DeviceManual:
-    def __init__(self, port="COM6", baudrate=115200):
-        self.serial = serial.Serial(port, baudrate=baudrate, timeout=1)
-        self.serial.reset_input_buffer()
-        print("Połączenie z urządzeniem zainicjalizowane.")
+        ser = serial.Serial(port, baudrate=baudrate, timeout=0.1)
+        ser.reset_input_buffer()
 
-    def send_rpc(self, rpc_name, rpc_type, value=None):
-        rpc_packet = bytearray()
-        rpc_packet += struct.pack('<H', len(rpc_name))
-        rpc_packet += rpc_name.encode('utf-8')
-        rpc_packet += struct.pack('<B', rpc_type)
-        if value is not None:
-            rpc_packet += struct.pack('<f', value)
-        self.serial.write(rpc_packet)
-        response = self.serial.readline()
+        protocol = TIOProtocol()
+
+        packet_rpc = b'\xc0\x02\x00\x0c\x00g\x9d\x08\x80data.format\x86Gq~\xc0'
+        ser.write(packet_rpc)
+        response = ser.read(64)
         print(f"Odpowiedź RPC: {response}")
 
-    def configure_binary_mode(self):
-        print("Przełączanie urządzenia w tryb binarny...")
-        init_packet = bytearray(b'\xc0\x02\x00\x0c\x00g\x9d\x08\x80dev.desc\x86Gq~\xc0')
-        self.serial.write(init_packet)
-        time.sleep(0.1)
-        response = self.serial.readline()
-        print(f"Odpowiedź z urządzenia: {response.decode(errors='ignore')}")
+        sampling_rate_rpc = b'\xc0\x02\x00\x0c\x00g\x9d\x08\x80data.rate\x86Gq~\xc0'
+        ser.write(sampling_rate_rpc)
+        response = ser.read(64)
+        print(f"Ustawiono częstotliwość próbkowania: {response}")
 
-    def read_data(self):
-        buffer = bytearray()
+        return ser, protocol, data_queue
+
+    except Exception as e:
+        print(f"Błąd podczas inicjalizacji sensora: {e}")
+        return None, None, None
+
+
+def read_data(ser, protocol, data_queue):
+    buffer = bytearray()
+
+    try:
         while True:
-            data = self.serial.read(self.serial.in_waiting or 64)
+            data = ser.read(ser.in_waiting or 64)
             buffer.extend(data)
-            if b'\xc0' in buffer:
-                packet, buffer = buffer.split(b'\xc0', 1)
-                print(f"Odebrany pakiet: {packet}")
 
-    def close(self):
-        self.serial.close()
-        print("Połączenie zamknięte.")
+            while SLIP_END_CHAR in buffer:
+                try:
+                    packet, buffer = buffer.split(SLIP_END_CHAR, 1)
+                    decoded_packet = protocol.decode_packet(decode(packet))
 
+                    if decoded_packet["type"] == TL_PTYPE_STREAM0:
+                        timestamp, values = protocol.stream_data(decoded_packet, timeaxis=True)
+                        if data_queue:
+                            data_queue.put((timestamp, values))
+                    else:
+                        print(f"Nierozpoznany typ pakietu: {decoded_packet['type']}")
 
-if __name__ == "__main__":
-	device = DeviceManual(port="COM6", baudrate=115200)
-
-	print("Przełączam urządzenie w tryb binarny...")
-	device.configure_binary_mode()
-
-	print("Odczyt danych z urządzenia...")
-	try:
-		device.read_data()
-	except KeyboardInterrupt:
-		print("Przerwano testowanie.")
-	finally:
-		device.close()
+                except Exception as e:
+                    print(f"Błąd dekodowania pakietu: {e}")
+            time.sleep(0.005)
+    except KeyboardInterrupt:
+        print("Zakończono odczyt danych.")
+    except Exception as e:
+        print(f"Błąd w read_data: {e}")
+    finally:
+        ser.close()

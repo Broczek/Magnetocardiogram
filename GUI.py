@@ -5,8 +5,7 @@ import qtawesome as qta
 from data_processing import load_and_plot_file, update_plot
 from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change, handle_bandpass_apply_toggle, validate_bandpass_values, handle_filter_toggle
 from qtrangeslider import QLabeledDoubleRangeSlider
-from live_visualization import RealTimePlotWindow, reset_com_port
-import gc
+from live_visualization import RealTimePlotWindow
 
 
 class MainWindow(QMainWindow):
@@ -70,10 +69,8 @@ class MainWindow(QMainWindow):
         self.file_path_label = QLabel("No file selected")
         self.layout.addWidget(self.file_path_label, alignment=Qt.AlignLeft)
 
-        # Kontener na przyciski
         self.start_layout = QHBoxLayout()
 
-        # Przycisk analizy z pliku
         self.file_analysis_button = QPushButton("Analiza danych z pliku")
         self.file_analysis_button.setIcon(qta.icon('fa5s.file-import', color='white'))
         self.file_analysis_button.setStyleSheet("""
@@ -93,7 +90,6 @@ class MainWindow(QMainWindow):
         self.file_analysis_button.clicked.connect(self.start_file_analysis)
         self.start_layout.addWidget(self.file_analysis_button)
 
-        # Przycisk analizy w czasie rzeczywistym
         self.real_time_analysis_button = QPushButton("Analiza danych w czasie rzeczywistym")
         self.real_time_analysis_button.setIcon(qta.icon('fa5s.chart-line', color='white'))
         self.real_time_analysis_button.setStyleSheet("""
@@ -115,7 +111,6 @@ class MainWindow(QMainWindow):
 
         self.layout.addLayout(self.start_layout)
 
-        # Flaga kontroli otwartego okna analizy w czasie rzeczywistym
         self.real_time_window = None
 
         self.setFixedSize(500, 150)
@@ -414,13 +409,12 @@ class MainWindow(QMainWindow):
         self.layout.addLayout(self.slider_layout)
 
     def start_file_analysis(self):
-        """Przełącz do trybu analizy danych z pliku."""
         load_and_plot_file(self)
 
     def start_real_time_analysis(self):
         if not hasattr(self, 'real_time_window') or self.real_time_window is None:
             self.real_time_window = RealTimePlotWindow()
-            self.real_time_window.closed.connect(self.reset_real_time_window)  # Połącz sygnał z metodą
+            self.real_time_window.closed.connect(self.reset_real_time_window)
             self.real_time_window.show()
         else:
             print("Okno analizy w czasie rzeczywistym jest już otwarte.")
@@ -429,8 +423,7 @@ class MainWindow(QMainWindow):
         print("Resetowanie flagi real_time_window.")
         self.real_time_window = None
         import gc
-        gc.collect()  # Wymuś zwolnienie pamięci
-
+        gc.collect()
     def show_controls(self):
         show_controls(self)
 
