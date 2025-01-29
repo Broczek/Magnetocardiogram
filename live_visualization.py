@@ -33,14 +33,12 @@ class CustomTIOSession(tio.TIOSession):
     def recv_slip_packet(self):
         while self.alive and self.serial.is_open:
             try:
-                # read all that is there or wait for one byte (blocking)
                 data = self.serial.read(self.serial.in_waiting or 1)
             except serial.SerialException as e:
                 raise IOError(f"serial error: {e}")
             else:
                 if data:
                     self.buffer.extend(data)
-                    # print(len(self.buffer))
                     if len(self.buffer) > 200000:
                         self.warn_overload()
                     while slip.SLIP_END_CHAR in self.buffer:
@@ -48,9 +46,7 @@ class CustomTIOSession(tio.TIOSession):
                         try:
                             return slip.decode(packet)
                         except slip.SLIPEncodingError as error:
-                            self.logger.debug(error);
-                            # hexdump.hexdump(packet)
-                            # self.logger.exception(error)
+                            self.logger.debug(error)
                             return b""
 
     def process_recv_buffer(self):
@@ -125,22 +121,35 @@ class RealTimePlotWindow(QMainWindow):
         self.theme_label = QLabel("Tryb ciemny")
         self.theme_label.setStyleSheet("font-size: 14px; padding: 0px;")
 
-        self.top_layout.addWidget(self.toggle_theme, alignment=Qt.AlignTop | Qt.AlignRight)
-        self.top_layout.addWidget(self.theme_label, alignment=Qt.AlignTop | Qt.AlignRight)
+        self.dark_mode_layout = QHBoxLayout()
+        self.dark_mode_layout.setContentsMargins(0, 0, 0, 20)
+        self.dark_mode_layout.setSpacing(0)
+        self.dark_mode_layout.addStretch()
+        self.dark_mode_layout.addWidget(self.toggle_theme, alignment=Qt.AlignRight)
+        self.dark_mode_layout.addWidget(self.theme_label, alignment=Qt.AlignRight)
+        self.top_layout.addLayout(self.dark_mode_layout)
 
         self.filters_layout = QHBoxLayout()
 
-        self.lowpass_filter = QCheckBox("Filtr dolnoprzepustowy")
+        self.filters_label = QLabel("Filters:")
+        self.filters_label.setStyleSheet("font-size: 16px; padding: 0px;")
+        self.filters_layout.addWidget(self.filters_label)
+        self.filters_layout.addStretch()
+
+        self.lowpass_filter = QCheckBox("Lowpass")
         self.lowpass_filter.clicked.connect(self.toggle_lowpass)
         self.filters_layout.addWidget(self.lowpass_filter)
+        self.filters_layout.addStretch()
 
-        self.highpass_filter = QCheckBox("Filtr górnoprzepustowy")
+        self.highpass_filter = QCheckBox("Highpass")
         self.highpass_filter.clicked.connect(self.toggle_highpass)
         self.filters_layout.addWidget(self.highpass_filter)
+        self.filters_layout.addStretch()
 
-        self.notch_filter = QCheckBox("Filtr 50 Hz")
+        self.notch_filter = QCheckBox("50 Hz")
         self.notch_filter.clicked.connect(self.toggle_notch)
         self.filters_layout.addWidget(self.notch_filter)
+        self.filters_layout.addStretch()
 
         self.custom_filter_layout = QHBoxLayout()
         self.custom_filter_input = QLineEdit()
@@ -150,12 +159,14 @@ class RealTimePlotWindow(QMainWindow):
         self.custom_filter_input.setValidator(self.custom_filter_validator)
         self.custom_filter_input.textChanged.connect(
             lambda: validate_custom_filter(self.custom_filter_input, self.custom_filter_apply))
-        self.custom_filter_layout.addWidget(self.custom_filter_input, alignment=Qt.AlignTop)
+        self.custom_filter_layout.addWidget(self.custom_filter_input, alignment=Qt.AlignRight)
 
         self.custom_filter_apply = QCheckBox("Apply")
+        self.custom_filter_apply.setEnabled(False)
         self.custom_filter_apply.clicked.connect(self.toggle_custom)
-        self.custom_filter_layout.addWidget(self.custom_filter_apply, alignment=Qt.AlignLeft)
+        self.custom_filter_layout.addWidget(self.custom_filter_apply, alignment=Qt.AlignRight)
         self.filters_layout.addLayout(self.custom_filter_layout)
+
         self.top_layout.addLayout(self.filters_layout)
 
         switch_style = """
@@ -260,6 +271,7 @@ class RealTimePlotWindow(QMainWindow):
                 }
                 QLabel, QCheckBox, QPushButton {
                     color: #f0f0f0;
+                    font-size: 14px;
                 }
                 QPushButton {
                     background-color: #555;
@@ -296,6 +308,7 @@ class RealTimePlotWindow(QMainWindow):
                 }
                 QLabel, QCheckBox, QPushButton {
                     color: #333;
+                    font-size: 14px;
                 }
                 QPushButton {
                     background-color: #2d89ef;
