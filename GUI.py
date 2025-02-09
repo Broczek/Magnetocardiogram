@@ -1,11 +1,13 @@
 from PyQt5.QtCore import Qt, QEvent
-from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QCheckBox, QLineEdit, QSlider, QSpacerItem, QSizePolicy
+from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QCheckBox, QLineEdit, QSlider, QSpacerItem, QSizePolicy, \
+    QMessageBox
 from PyQt5.QtGui import QIntValidator, QIcon
 import qtawesome as qta
 from data_processing import load_and_plot_file, update_plot
-from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change, handle_bandpass_apply_toggle, validate_bandpass_values, handle_filter_toggle
+from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change, \
+    handle_bandpass_apply_toggle, validate_bandpass_values, handle_filter_toggle
 from qtrangeslider import QLabeledDoubleRangeSlider
-from live_visualization import RealTimePlotWindow
+from live_visualization import RealTimePlotWindow, CustomTIOSession
 
 
 class MainWindow(QMainWindow):
@@ -412,6 +414,17 @@ class MainWindow(QMainWindow):
         load_and_plot_file(self)
 
     def start_real_time_analysis(self):
+        try:
+            temp_session = CustomTIOSession(url="COM6", verbose=False, specialize=False)
+            temp_session.close()
+        except:
+            QMessageBox().critical(
+                self,
+                "Sensor Error",
+                f"Sensor is not connected"
+            )
+            return
+
         if not hasattr(self, 'real_time_window') or self.real_time_window is None:
             self.real_time_window = RealTimePlotWindow()
             self.real_time_window.closed.connect(self.reset_real_time_window)
@@ -424,6 +437,7 @@ class MainWindow(QMainWindow):
         self.real_time_window = None
         import gc
         gc.collect()
+
     def show_controls(self):
         show_controls(self)
 
@@ -467,6 +481,25 @@ class MainWindow(QMainWindow):
                     background: transparent;
                     border: none;
                     color: #f0f0f0;
+                }
+                QMessageBox {
+                    background-color: #2c2c2c;
+                    color: white;
+                    border-radius: 10px;
+                }
+                QMessageBox QLabel {
+                    color: white;
+                    font-size: 14px;
+                    padding-top: 5px;
+                }
+                QMessageBox QPushButton {
+                    background-color: #555;
+                    color: white;
+                    border-radius: 15px;
+                    padding: 10px 18px;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #777;
                 }
             """)
             if self.canvas_frame:
@@ -516,6 +549,25 @@ class MainWindow(QMainWindow):
                     background: transparent;
                     border: none;
                     color: #333;
+                }
+                QMessageBox {
+                    background-color: white;
+                    color: black;
+                    border-radius: 10px;
+                }
+                QMessageBox QLabel {
+                    color: black;
+                    font-size: 14px;
+                    padding-top: 5px;
+                }
+                QMessageBox QPushButton {
+                    background-color: #2d89ef;
+                    color: white;
+                    border-radius: 15px;
+                    padding: 10px 18px;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #1e70c1;
                 }
             """)
             if self.canvas_frame:
