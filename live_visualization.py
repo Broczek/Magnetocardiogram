@@ -1,7 +1,9 @@
+import os
+
 from PyQt5.QtGui import QIntValidator, QIcon
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QFileDialog, QPushButton, QHBoxLayout, QCheckBox, QLabel, \
     QSizePolicy, QFrame, QLineEdit
-from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QObject, QThreadPool
+from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QObject, QThreadPool, QEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import numpy as np
@@ -13,7 +15,8 @@ import queue
 import tio
 import slip
 import serial
-from backend import lowpass_filter, highpass_filter, notch_filter, validate_custom_filter
+from backend import lowpass_filter, highpass_filter, notch_filter, validate_custom_filter, state_change
+from backend import IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
 
 
 class FilterWorkerSignals(QObject):
@@ -79,10 +82,15 @@ class CustomTIOSession(tio.TIOSession):
 class RealTimePlotWindow(QMainWindow):
     closed = pyqtSignal()
 
+    def changeEvent(self, event):
+        if event.type() == QEvent.WindowStateChange or event.type() == QEvent.ActivationChange:
+            state_change(self)
+        super().changeEvent(event)
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Real-Time Data Plot")
-        self.setWindowIcon(QIcon('./images/Icon.png'))
+        self.setWindowIcon(QIcon(os.path.join(IMAGES_DIR, "Icon.png")))
         self.resize(1500, 800)
         self.setMinimumSize(1500, 800)
         self.setWindowFlags(self.windowFlags() | Qt.Window)
@@ -100,21 +108,21 @@ class RealTimePlotWindow(QMainWindow):
         self.top_layout.setSpacing(5)
 
         self.toggle_theme = QCheckBox()
-        self.toggle_theme.setStyleSheet("""
-            QCheckBox::indicator {
+        self.toggle_theme.setStyleSheet(f"""
+            QCheckBox::indicator {{
                 width: 40px;
                 height: 20px;
                 border-radius: 10px;
                 background-color: #ccc;
-            }
-            QCheckBox::indicator:checked {
+            }}
+            QCheckBox::indicator:checked {{
                 background-color: #2d89ef;
-                image: url(./images/dot_black.png);
-            }
-            QCheckBox::indicator:unchecked {
+                image: url({DOT_BLACK_PATH});
+            }}
+            QCheckBox::indicator:unchecked {{
                 background-color: #ccc;
-                image: url(./images/dot_white.png);
-            }
+                image: url({DOT_WHITE_PATH});
+            }}
         """)
         self.toggle_theme.stateChanged.connect(self.change_theme)
 
@@ -169,22 +177,21 @@ class RealTimePlotWindow(QMainWindow):
 
         self.top_layout.addLayout(self.filters_layout)
 
-        switch_style = """
-                        QCheckBox::indicator {
+        switch_style = f"""
+                        QCheckBox::indicator {{
                             width: 40px;
                             height: 20px;
                             border-radius: 10px;
                             background-color: #ccc;
                             position: relative;
-                        }
-                        QCheckBox::indicator:checked {
+                        }}
+                        QCheckBox::indicator:checked {{
                             background-color: #2d89ef;
-                            image: url(./images/dot_black.png);
-                        }
-                        QCheckBox::indicator:unchecked {
+                            image: url({DOT_BLACK_PATH});
+                        }}                        QCheckBox::indicator:unchecked {{
                             background-color: #ccc;
-                            image: url(./images/dot_white.png);
-                        }
+                            image: url({DOT_BLACK_PATH});
+                        }}
                     """
 
         self.lowpass_filter.setStyleSheet(switch_style)

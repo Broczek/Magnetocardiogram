@@ -1,3 +1,4 @@
+import os
 from PyQt5.QtCore import Qt, QEvent
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QCheckBox, QLineEdit, QSlider, QSpacerItem, QSizePolicy, \
     QMessageBox
@@ -8,6 +9,7 @@ from backend import show_controls, validate_input, apply_time_range, update_pan,
     handle_bandpass_apply_toggle, validate_bandpass_values, handle_filter_toggle
 from qtrangeslider import QLabeledDoubleRangeSlider
 from live_visualization import RealTimePlotWindow, CustomTIOSession
+from backend import IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
 
 
 class MainWindow(QMainWindow):
@@ -21,7 +23,7 @@ class MainWindow(QMainWindow):
 
         self.dark_mode = None
         self.setWindowTitle("MKG wizualizacja")
-        self.setWindowIcon(QIcon('./images/Icon.png'))
+        self.setWindowIcon(QIcon(os.path.join(IMAGES_DIR, "Icon.png")))
         self.is_active = True
 
         self.layout = QVBoxLayout()
@@ -41,22 +43,22 @@ class MainWindow(QMainWindow):
         }""")
 
         self.toggle_theme = QCheckBox()
-        self.toggle_theme.setStyleSheet("""
-            QCheckBox::indicator {
+        self.toggle_theme.setStyleSheet(f"""
+            QCheckBox::indicator {{
                 width: 40px;
                 height: 20px;
                 border-radius: 10px;
                 background-color: #ccc;
                 position: relative;
-            }
-            QCheckBox::indicator:checked {
+            }}
+            QCheckBox::indicator:checked {{
                 background-color: #2d89ef;
-                image: url(./images/dot_black.png);
-            }
-            QCheckBox::indicator:unchecked {
+                image: url("{DOT_BLACK_PATH}");
+            }}
+            QCheckBox::indicator:unchecked {{
                 background-color: #ccc;
-                image: url(./images/dot_white.png);
-            }
+                image: url("{DOT_WHITE_PATH}");
+            }}
         """)
 
         self.toggle_theme.stateChanged.connect(self.change_theme)
@@ -282,22 +284,22 @@ class MainWindow(QMainWindow):
         self.range_and_filters_layout.addLayout(self.filters_defined_layout)
         self.range_and_filters_layout.addLayout(self.custom_filters_layout)
 
-        switch_style = """
-                QCheckBox::indicator {
+        switch_style = f"""
+                QCheckBox::indicator {{
                     width: 40px;
                     height: 20px;
                     border-radius: 10px;
                     background-color: #ccc;
                     position: relative;
-                }
-                QCheckBox::indicator:checked {
+                }}
+                QCheckBox::indicator:checked {{
                     background-color: #2d89ef;
-                    image: url(./images/dot_black.png);
-                }
-                QCheckBox::indicator:unchecked {
+                    qproperty-icon: url("{DOT_BLACK_PATH}");
+                }}
+                QCheckBox::indicator:unchecked {{
                     background-color: #ccc;
-                    image: url(./images/dot_white.png);
-                }
+                    qproperty-icon: url("{DOT_WHITE_PATH}");
+                }}
             """
 
         self.lowpass_filter.setStyleSheet(switch_style)

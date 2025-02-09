@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog, QApplication
@@ -6,6 +7,15 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from scipy.signal import butter, filtfilt, lfilter
 
+if getattr(sys, 'frozen', False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+IMAGES_DIR = os.path.join(BASE_DIR, "images")
+
+DOT_BLACK_PATH = os.path.join(IMAGES_DIR, "dot_black.png").replace("\\", "/")
+DOT_WHITE_PATH = os.path.join(IMAGES_DIR, "dot_white.png").replace("\\", "/")
 
 class MplCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
@@ -17,9 +27,9 @@ class MplCanvas(FigureCanvas):
 
 def state_change(window):
     if window.isActiveWindow():
-        window.setWindowIcon(QIcon('./images/Icon.png'))
+        window.setWindowIcon(QIcon(os.path.join(IMAGES_DIR, "Icon.png")))
     else:
-        window.setWindowIcon(QIcon('./images/Icon_black.png'))
+        window.setWindowIcon(QIcon(os.path.join(IMAGES_DIR, "Icon_black.png")))
 
 
 def show_controls(window):
