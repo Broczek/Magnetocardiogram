@@ -17,6 +17,7 @@ IMAGES_DIR = os.path.join(BASE_DIR, "images")
 DOT_BLACK_PATH = os.path.join(IMAGES_DIR, "dot_black.png").replace("\\", "/")
 DOT_WHITE_PATH = os.path.join(IMAGES_DIR, "dot_white.png").replace("\\", "/")
 
+
 class MplCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
         fig = Figure(figsize=(width, height), dpi=dpi)
@@ -140,10 +141,12 @@ def lowpass_filter(data, normal_cutoff=0.08, order=5):
     y = lfilter(b, a, data)
     return y
 
+
 def highpass_filter(data, normal_cutoff=0.003, order=5):
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
     y = lfilter(b, a, data)
     return y
+
 
 def notch_filter(data, freq=50, fs=480, bandwidth=5):
     nyq = 0.5 * fs
@@ -181,19 +184,18 @@ def handle_bandpass_apply_toggle(window):
 
 
 def update_slider_labels(window):
-    if window.bandpass_apply.isChecked():
-        low_value, high_value = window.bandpass_slider.value()
-        try:
-            window.bandpass_slider._min_label.setValue(low_value)
-            if high_value <= 40:
-                window.bandpass_slider._max_label.setValue(40)
-                time.sleep(0.1)
-                QApplication.processEvents()
-            else:
-                window.bandpass_slider._max_label.setValue(high_value)
-
-        except AttributeError as e:
+    low_value, high_value = window.bandpass_slider.value()
+    try:
+        window.bandpass_slider._min_label.setValue(low_value)
+        if high_value <= 60:
+            window.bandpass_slider._max_label.setValue(60)
+            time.sleep(0.1)
+            QApplication.processEvents()
+        else:
+            window.bandpass_slider._max_label.setValue(high_value)
+    except AttributeError as e:
             print(f"Błąd aktualizacji etykiet: {e}")
+    if window.bandpass_apply.isChecked():
         update_bandpass_filter(window)
     else:
         print("Bandpass filter is off. Slider movement will not affect the plot.")
@@ -202,11 +204,12 @@ def update_slider_labels(window):
 def validate_bandpass_values(window):
     low_value, high_value = window.bandpass_slider.value()
 
-    if high_value < 40:
-        high_value = 40
+    if high_value < 60:
+        high_value = 60
         window.bandpass_slider.setValue((low_value, high_value))
 
     update_slider_labels(window)
+    QApplication.processEvents()
 
 
 def apply_filters(window, data):

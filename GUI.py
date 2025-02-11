@@ -228,11 +228,11 @@ class MainWindow(QMainWindow):
 
         self.bandpass_layout = QHBoxLayout()
         self.bandpass_slider = QLabeledDoubleRangeSlider(Qt.Horizontal)
-        self.bandpass_slider.setRange(1, 400)
+        self.bandpass_slider.setRange(0.5, 400)
         self.bandpass_slider.setValue((20, 200))
         self.bandpass_slider.setFixedWidth(100)
-        self.bandpass_slider.setSingleStep(1)
-        self.bandpass_slider.setDecimals(0)
+        self.bandpass_slider.setSingleStep(0.5)
+        self.bandpass_slider.setDecimals(1)
 
         self.bandpass_slider.setStyleSheet("""
             QSlider{
@@ -294,11 +294,11 @@ class MainWindow(QMainWindow):
                 }}
                 QCheckBox::indicator:checked {{
                     background-color: #2d89ef;
-                    qproperty-icon: url("{DOT_BLACK_PATH}");
+                    image: url("{DOT_BLACK_PATH}");
                 }}
                 QCheckBox::indicator:unchecked {{
                     background-color: #ccc;
-                    qproperty-icon: url("{DOT_WHITE_PATH}");
+                    image: url("{DOT_WHITE_PATH}");
                 }}
             """
 
