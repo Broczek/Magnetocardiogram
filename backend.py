@@ -136,15 +136,27 @@ def bandpass_filter(data, lowcut, highcut, fs=1000.0, order=5):
     return y
 
 
-def lowpass_filter(data, normal_cutoff=0.08, order=5):
+def lowpass_filter_live(data, normal_cutoff=0.08, order=5):
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
     y = lfilter(b, a, data)
     return y
 
 
-def highpass_filter(data, normal_cutoff=0.003, order=5):
+def highpass_filter_live(data, normal_cutoff=0.003, order=5):
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
     y = lfilter(b, a, data)
+    return y
+
+
+def lowpass_filter(data, normal_cutoff=0.1, order=5):
+    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    y = filtfilt(b, a, data)
+    return y
+
+
+def highpass_filter(data, normal_cutoff=0.001, order=5):
+    b, a = butter(order, normal_cutoff, btype='high', analog=False)
+    y = filtfilt(b, a, data)
     return y
 
 
@@ -380,7 +392,8 @@ def update_plot(window, data, time_from=None, time_to=None):
         if not visible_data.empty:
             min_y = visible_data['gradient.B'].min()
             max_y = visible_data['gradient.B'].max()
-            window.canvas.axes.set_ylim(min_y, max_y)
+            data_range = max_y - min_y
+            window.canvas.axes.set_ylim(min_y - data_range, max_y + data_range)
 
         if window.toggle_theme.isChecked():
             window.canvas.axes.set_facecolor('#2c2c2c')
@@ -441,7 +454,8 @@ def update_zoom(window, value):
     max_y = visible_data['gradient.B'].max()
 
     if not visible_data.empty:
-        window.canvas.axes.set_ylim(min_y, max_y)
+        data_range_y = max_y - min_y
+        window.canvas.axes.set_ylim(min_y - data_range_y, max_y + data_range_y)
 
     print(min_y, max_y)
 
@@ -476,7 +490,8 @@ def update_pan(window, value):
     max_y = visible_data['gradient.B'].max()
 
     if not visible_data.empty:
-        window.canvas.axes.set_ylim(min_y, max_y)
+        data_range_y = max_y - min_y
+        window.canvas.axes.set_ylim(min_y - data_range_y, max_y + data_range_y)
 
     print(min_y, max_y)
 

@@ -15,7 +15,7 @@ import queue
 import tio
 import slip
 import serial
-from backend import lowpass_filter, highpass_filter, notch_filter, validate_custom_filter, state_change
+from backend import lowpass_filter_live, highpass_filter_live, notch_filter, validate_custom_filter, state_change
 from backend import IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
 
 
@@ -530,9 +530,9 @@ class RealTimePlotCanvas(FigureCanvas):
                             filtered_value = [ostatnia_wartosc]
 
                             if self.parent_window.lowpass_enabled:
-                                filtered_value = lowpass_filter(filtered_value, normal_cutoff=0.5)
+                                filtered_value = lowpass_filter_live(filtered_value, normal_cutoff=0.5)
                             if self.parent_window.highpass_enabled:
-                                filtered_value = highpass_filter(filtered_value, normal_cutoff=0.01)
+                                filtered_value = highpass_filter_live(filtered_value, normal_cutoff=0.01)
                             if self.parent_window.notch_enabled:
                                 filtered_value = notch_filter(filtered_value, 50)
                             if self.parent_window.custom_enabled:
