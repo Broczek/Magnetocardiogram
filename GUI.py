@@ -285,22 +285,22 @@ class MainWindow(QMainWindow):
         self.range_and_filters_layout.addLayout(self.custom_filters_layout)
 
         switch_style = f"""
-                QCheckBox::indicator {{
-                    width: 40px;
-                    height: 20px;
-                    border-radius: 10px;
-                    background-color: #ccc;
-                    position: relative;
-                }}
-                QCheckBox::indicator:checked {{
-                    background-color: #2d89ef;
-                    image: url("{DOT_BLACK_PATH}");
-                }}
-                QCheckBox::indicator:unchecked {{
-                    background-color: #ccc;
-                    image: url("{DOT_WHITE_PATH}");
-                }}
-            """
+            QCheckBox::indicator {{
+                width: 40px;
+                height: 20px;
+                border-radius: 10px;
+                background-color: #ccc;
+                position: relative;
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: #2d89ef;
+                image: url("{DOT_BLACK_PATH}");
+            }}
+            QCheckBox::indicator:unchecked {{
+                background-color: #ccc;
+                image: url("{DOT_WHITE_PATH}");
+            }}
+        """
 
         self.lowpass_filter.setStyleSheet(switch_style)
         self.highpass_filter.setStyleSheet(switch_style)
@@ -416,17 +416,6 @@ class MainWindow(QMainWindow):
         load_and_plot_file(self)
 
     def start_real_time_analysis(self):
-        try:
-            temp_session = CustomTIOSession(url="COM6", verbose=False, specialize=False)
-            temp_session.close()
-        except:
-            QMessageBox().critical(
-                self,
-                "Sensor Error",
-                f"Sensor is not connected"
-            )
-            return
-
         if not hasattr(self, 'real_time_window') or self.real_time_window is None:
             self.real_time_window = RealTimePlotWindow()
             self.real_time_window.closed.connect(self.reset_real_time_window)

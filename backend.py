@@ -206,6 +206,8 @@ def update_slider_labels(window):
         else:
             window.bandpass_slider._max_label.setValue(high_value)
     except AttributeError as e:
+
+
             print(f"Błąd aktualizacji etykiet: {e}")
     if window.bandpass_apply.isChecked():
         update_bandpass_filter(window)

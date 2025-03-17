@@ -1,5 +1,4 @@
 import os
-
 from PyQt5.QtGui import QIntValidator, QIcon
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QFileDialog, QPushButton, QHBoxLayout, QCheckBox, QLabel, \
     QSizePolicy, QFrame, QLineEdit
@@ -15,8 +14,7 @@ import queue
 import tio
 import slip
 import serial
-from backend import lowpass_filter_live, highpass_filter_live, notch_filter, validate_custom_filter, state_change
-from backend import IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
+from backend import lowpass_filter_live, highpass_filter_live, notch_filter, validate_custom_filter, state_change, IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
 
 
 class FilterWorkerSignals(QObject):
@@ -117,11 +115,11 @@ class RealTimePlotWindow(QMainWindow):
             }}
             QCheckBox::indicator:checked {{
                 background-color: #2d89ef;
-                image: url({DOT_BLACK_PATH});
+                image: url("{DOT_BLACK_PATH}");
             }}
             QCheckBox::indicator:unchecked {{
                 background-color: #ccc;
-                image: url({DOT_WHITE_PATH});
+                image: url("{DOT_WHITE_PATH}");
             }}
         """)
         self.toggle_theme.stateChanged.connect(self.change_theme)
@@ -178,21 +176,22 @@ class RealTimePlotWindow(QMainWindow):
         self.top_layout.addLayout(self.filters_layout)
 
         switch_style = f"""
-                        QCheckBox::indicator {{
-                            width: 40px;
-                            height: 20px;
-                            border-radius: 10px;
-                            background-color: #ccc;
-                            position: relative;
-                        }}
-                        QCheckBox::indicator:checked {{
-                            background-color: #2d89ef;
-                            image: url({DOT_BLACK_PATH});
-                        }}                        QCheckBox::indicator:unchecked {{
-                            background-color: #ccc;
-                            image: url({DOT_BLACK_PATH});
-                        }}
-                    """
+            QCheckBox::indicator {{
+                width: 40px;
+                height: 20px;
+                border-radius: 10px;
+                background-color: #ccc;
+                position: relative;
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: #2d89ef;
+                image: url("{DOT_BLACK_PATH}");
+            }}                        
+            QCheckBox::indicator:unchecked {{
+                background-color: #ccc;
+                image: url("{DOT_BLACK_PATH}");
+            }}
+        """
 
         self.lowpass_filter.setStyleSheet(switch_style)
         self.highpass_filter.setStyleSheet(switch_style)
