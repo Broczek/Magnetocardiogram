@@ -189,7 +189,7 @@ class RealTimePlotWindow(QMainWindow):
             }}                        
             QCheckBox::indicator:unchecked {{
                 background-color: #ccc;
-                image: url("{DOT_BLACK_PATH}");
+                image: url("{DOT_WHITE_PATH}");
             }}
         """
 
