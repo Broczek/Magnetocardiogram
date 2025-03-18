@@ -1,4 +1,6 @@
 import os
+import queue
+
 from PyQt5.QtGui import QIntValidator, QIcon
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QFileDialog, QPushButton, QHBoxLayout, QCheckBox, QLabel, \
     QSizePolicy, QFrame, QLineEdit
@@ -7,13 +9,17 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import numpy as np
 import threading
+import serial
 import time
 import subprocess
 import datetime
-import queue
 import tio
-import slip
 import serial
+from tio import TIOProtocol, TL_PTYPE_STREAM0
+import slip
+from slip import decode
+from queue import Queue
+from initialization import DeviceManual
 from backend import lowpass_filter_live, highpass_filter_live, notch_filter, validate_custom_filter, state_change, IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
 
 
@@ -24,57 +30,6 @@ class FilterWorkerSignals(QObject):
 
 class TLRPCException(Exception):
     pass
-
-
-class CustomTIOSession(tio.TIOSession):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.recv_buffer = bytearray()
-
-    def recv_slip_packet(self):
-        while self.alive and self.serial.is_open:
-            try:
-                data = self.serial.read(self.serial.in_waiting or 1)
-            except serial.SerialException as e:
-                raise IOError(f"serial error: {e}")
-            else:
-                if data:
-                    self.buffer.extend(data)
-                    if len(self.buffer) > 200000:
-                        self.warn_overload()
-                    while slip.SLIP_END_CHAR in self.buffer:
-                        packet, self.buffer = self.buffer.split(slip.SLIP_END_CHAR, 1)
-                        try:
-                            return slip.decode(packet)
-                        except slip.SLIPEncodingError as error:
-                            self.logger.debug(error)
-                            return b""
-
-    def process_recv_buffer(self):
-        while slip.SLIP_END_CHAR in self.recv_buffer:
-            packet, self.recv_buffer = self.recv_buffer.split(slip.SLIP_END_CHAR, 1)
-            try:
-                decoded_packet = self.protocol.decode_packet(slip.decode(packet))
-                if decoded_packet['type'] == tio.TL_PTYPE_STREAM0:
-                    try:
-                        self.pub_queue.put(decoded_packet, block=False)
-                    except queue.Full:
-                        self.pub_queue.get()
-                        self.pub_queue.put(decoded_packet, block=False)
-                elif decoded_packet['type'] in [tio.TL_PTYPE_RPC_REP, tio.TL_PTYPE_RPC_ERROR]:
-                    try:
-                        self.rep_queue.put(decoded_packet, block=False)
-                    except queue.Full:
-                        self.rep_queue.get()
-                        self.rep_queue.put(decoded_packet, block=False)
-                        self.logger.error("Tossing an unclaimed REP!")
-                elif decoded_packet['type'] == tio.TL_PTYPE_OTHER_ROUTING:
-                    if self.recv_router is not None:
-                        self.recv_router(decoded_packet['routing'], decoded_packet['raw'])
-            except slip.SLIPEncodingError as error:
-                self.logger.debug(f"SLIP decoding error: {error}")
-            except Exception as e:
-                self.logger.error(f"Error decoding packet: {e}")
 
 
 class RealTimePlotWindow(QMainWindow):
@@ -205,25 +160,19 @@ class RealTimePlotWindow(QMainWindow):
 
         self.canvas_frame = QFrame(self.central_widget)
         self.canvas_frame.setContentsMargins(0, 0, 0, 0)
-
         self.canvas = RealTimePlotCanvas()
         self.canvas.parent_window = self
-
         self.canvas_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
         self.canvas_frame_layout = QVBoxLayout(self.canvas_frame)
         self.canvas_frame_layout.setContentsMargins(20, 20, 20, 20)
         self.canvas_frame_layout.setSpacing(10)
         self.canvas_frame_layout.addWidget(self.canvas)
-
         self.top_layout.addWidget(self.canvas_frame)
         self.layout.addLayout(self.top_layout)
-
         self.button_layout = QHBoxLayout()
         self.start_recording_button = QPushButton("Rozpocznij rejestrację")
         self.stop_recording_button = QPushButton("Zatrzymaj rejestrację")
-
         button_style = """
             QPushButton {
                 background-color: #2d89ef;
@@ -241,11 +190,9 @@ class RealTimePlotWindow(QMainWindow):
         """
         self.start_recording_button.setStyleSheet(button_style)
         self.stop_recording_button.setStyleSheet(button_style)
-
         self.start_recording_button.clicked.connect(self.start_recording)
         self.stop_recording_button.clicked.connect(self.stop_recording)
         self.stop_recording_button.setEnabled(False)
-
         self.button_layout.addWidget(self.start_recording_button)
         self.button_layout.addWidget(self.stop_recording_button)
         self.layout.addLayout(self.button_layout)
@@ -318,8 +265,6 @@ class RealTimePlotWindow(QMainWindow):
                 }
                 QPushButton {
                     background-color: #2d89ef;
-                    color: white;
-                    border-radius: 10px;
                 }
                 QPushButton:hover {
                     background-color: #1e70c1;
@@ -378,9 +323,7 @@ class RealTimePlotWindow(QMainWindow):
         print("Zamykam RealTimePlotWindow.")
         self.canvas.stop_data_loop()
         try:
-            if self.canvas.session:
-                self.canvas.session.close()
-            devcon_path = r"C:\Program Files (x86)\Windows Kits\10\Tools\x64\devcon.exe"
+            devcon_path = r"C:\Program Files (x86)\Windows Kits\10\Tools\10.0.26100.0\x64\devcon.exe"
             device_id = "USB\\VID_0483&PID_5740"
             reset_com_port(devcon_path, device_id)
         except Exception as e:
@@ -394,8 +337,7 @@ class RealTimePlotCanvas(FigureCanvas):
 
     def __init__(self):
         super().__init__()
-
-        self.session = None
+        self.protocol = TIOProtocol()
         self.data_thread = None
 
         self.parent_window = None
@@ -404,19 +346,15 @@ class RealTimePlotCanvas(FigureCanvas):
         self.xlim = 800
         self.n = np.linspace(0, self.xlim - 1, self.xlim)
         self.y = np.zeros(self.xlim)
-
         self.fig = Figure(figsize=(5, 5), dpi=100)
         self.ax1 = self.fig.add_subplot(111)
         self.ax1.set_xlim(0, self.xlim - 1)
         self.ax1.set_ylim(-900, -600)
         self.ax1.set_xlabel('Index')
         self.ax1.set_ylabel('Sensor Value')
-
         self.line1, = self.ax1.plot([], [], 'b-', label='Sensor Data')
         self.ax1.legend()
-
         super().__init__(self.fig)
-
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_plot)
         self.timer.start(10)
@@ -450,13 +388,16 @@ class RealTimePlotCanvas(FigureCanvas):
                                                   'data_recording') and self.parent_window.data_recording:
                     timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")
                     self.parent_window.recorded_data.append((timestamp, value))
+                    print(f"Dodano dane: {timestamp}, {value}")
 
             y_min, y_max = self.y.min(), self.y.max()
             if np.isnan(y_min) or np.isnan(y_max) or np.isinf(y_min) or np.isinf(y_max):
                 print("Nieprawidłowe dane, ustawiam domyślny zakres osi Y.")
                 self.ax1.set_ylim(-10000, 10000)
             else:
-                self.ax1.set_ylim(y_min - 10, y_max + 10)
+                data_range = y_max - y_min
+                margin = (data_range / 2) if data_range != 0 else 1
+                self.ax1.set_ylim(y_min - margin, y_max + margin)
 
             self.line1.set_data(np.arange(self.xlim), self.y)
             self.ax1.draw_artist(self.ax1.patch)
@@ -477,8 +418,20 @@ class RealTimePlotCanvas(FigureCanvas):
         self.running = False
         if self.data_thread is not None and self.data_thread.is_alive():
             self.data_thread.join()
-        if self.session:
-            self.session.close()
+        self.safely_close_port()
+
+    def restart_data_loop(self):
+        self.stop_data_loop()
+        time.sleep(0.2)
+        self.start_data_loop()
+
+    def safely_close_port(self):
+        if hasattr(self, 'device') and self.device.serial.is_open:
+            try:
+                print("Zamykanie portu szeregowego przed ponownym otwarciem.")
+                self.device.close()
+            except Exception as e:
+                print(f"Błąd zamykania portu: {e}")
 
     def filter_loop(self):
         while True:
@@ -494,64 +447,57 @@ class RealTimePlotCanvas(FigureCanvas):
                 print(f"Błąd podczas filtrowania: {e}")
 
     def data_loop(self):
-        print("data_loop wywołane")
         try:
-            self.session = CustomTIOSession(url="COM6", verbose=False, specialize=False)
-            if not self.session:
-                print("Nie udało się zainicjalizować sensora.")
-                return
+            self.device = DeviceManual(port="COM6", baudrate=115200)
+            self.device.configure_binary_mode()
 
-            print("Sensor zainicjalizowany. Inicjalizacja specialize...")
-            self.session.specialize(connectingMessage=False, stateCache=False)
-
-            wait_start_time = time.time()
-            while not self.session.protocol.streams:
-                time.sleep(0.1)
-                if time.time() - wait_start_time > 5:
-                    print("Nie udało się otrzymać informacji o strumieniu.")
-                    return
-
-            print("Informacje o strumieniu odebrane. Rozpoczynam odczyt danych...")
-            self.running = True
+            print("Rozpoczęto odbieranie danych...")
             count = 0
             sample_interval = 5
 
             while self.running:
-                try:
-                    decoded_packet = self.session.pub_queue.get(timeout=1)
-                    if decoded_packet["type"] == tio.TL_PTYPE_STREAM0:
-                        timestamp, values = self.session.protocol.stream_data(decoded_packet, timeaxis=True)
-                        ostatnia_wartosc = values[-1]
-                        print(f"Odebrano z kolejki: Czas: {timestamp}, Ostatnia wartość: {ostatnia_wartosc}")
+                data = self.device.serial.read(self.device.serial.in_waiting or 64)
+                if data:
+                    try:
+                        packet = data.split(b'\xc0')[0]
+                        if packet:
+                            decoded_value = int.from_bytes(packet[-4:], 'little', signed=True)
+                            print(f"Odebrana wartość: {decoded_value}")
 
-                        count += 1
-                        if count % sample_interval == 0:
-                            filtered_value = [ostatnia_wartosc]
+                            count += 1
+                            if count % sample_interval == 0:
+                                filtered_value = [decoded_value]
 
-                            if self.parent_window.lowpass_enabled:
-                                filtered_value = lowpass_filter_live(filtered_value, normal_cutoff=0.5)
-                            if self.parent_window.highpass_enabled:
-                                filtered_value = highpass_filter_live(filtered_value, normal_cutoff=0.01)
-                            if self.parent_window.notch_enabled:
-                                filtered_value = notch_filter(filtered_value, 50)
-                            if self.parent_window.custom_enabled:
-                                try:
-                                    custom_freq = int(self.parent_window.custom_filter_input.text())
-                                    if 1 <= custom_freq <= 999:
-                                        filtered_value = notch_filter(filtered_value, custom_freq, fs=self.sample_rate)
-                                except ValueError:
-                                    print("Nieprawidłowa wartość dla filtru customowego.")
+                                if self.parent_window.lowpass_enabled:
+                                    filtered_value = lowpass_filter_live(filtered_value, normal_cutoff=0.5)
 
-                            self.addedData.append(filtered_value[0])
-                            count = 0
+                                if self.parent_window.highpass_enabled:
+                                    filtered_value = highpass_filter_live(filtered_value, normal_cutoff=0.2)
 
-                except queue.Empty:
-                    pass
-                except Exception as e:
-                    print(f"Błąd w data_loop: {e}")
+                                if self.parent_window.notch_enabled:
+                                    filtered_value = notch_filter(filtered_value, 50)
+
+                                if self.parent_window.custom_enabled:
+                                    try:
+                                        custom_freq = int(self.parent_window.custom_filter_input.text())
+                                        if 1 <= custom_freq <= 999:
+                                            filtered_value = notch_filter(filtered_value, custom_freq,
+                                                                          fs=self.sample_rate)
+                                    except ValueError:
+                                        print("Nieprawidłowa wartość dla filtru customowego.")
+
+                                self.addedData.append(filtered_value[0])
+                                count = 0
+
+                    except Exception as e:
+                        print(f"Błąd dekodowania: {e}")
+
+        except Exception as e:
+            print(f"Błąd komunikacji z urządzeniem: {e}")
+
         finally:
-            if self.session:
-                self.session.close()
+            if self.device:
+                self.device.close()
 
     def set_dark_mode(self, enabled):
         if enabled:
@@ -594,3 +540,13 @@ def reset_com_port(devcon_path, device_id):
         subprocess.run([devcon_path, "enable", device_id], check=True)
     except Exception as e:
         print(f"Błąd resetowania urządzenia: {e}")
+
+
+def decode_tio_packet(protocol, packet):
+    try:
+        data = protocol.stream_data(packet, timeaxis=True)
+        return data
+    except Exception as e:
+        print(f"Błąd dekodowania pakietu: {e}")
+        return None
+
