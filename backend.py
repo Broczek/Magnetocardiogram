@@ -1,9 +1,21 @@
+import os
+import sys
+import time
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog, QApplication
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog, QApplication
-from PyQt5.QtGui import QIcon
-from scipy.signal import butter, filtfilt, iirnotch
-import os, time
+from scipy.signal import butter, filtfilt, lfilter
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+IMAGES_DIR = os.path.join(BASE_DIR, "images")
+
+DOT_BLACK_PATH = os.path.join(IMAGES_DIR, "dot_black.png").replace("\\", "/")
+DOT_WHITE_PATH = os.path.join(IMAGES_DIR, "dot_white.png").replace("\\", "/")
 
 
 class MplCanvas(FigureCanvas):
@@ -16,9 +28,9 @@ class MplCanvas(FigureCanvas):
 
 def state_change(window):
     if window.isActiveWindow():
-        window.setWindowIcon(QIcon('./images/Icon.png'))
+        window.setWindowIcon(QIcon(os.path.join(IMAGES_DIR, "Icon.png")))
     else:
-        window.setWindowIcon(QIcon('./images/Icon_black.png'))
+        window.setWindowIcon(QIcon(os.path.join(IMAGES_DIR, "Icon_black.png")))
 
 
 def show_controls(window):
@@ -124,34 +136,36 @@ def bandpass_filter(data, lowcut, highcut, fs=1000.0, order=5):
     return y
 
 
-def lowpass_filter(data):
-    normal_cutoff = 0.08
-    order = 5
+def lowpass_filter_live(data, normal_cutoff=0.08, order=5):
+    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    y = lfilter(b, a, data)
+    return y
+
+
+def highpass_filter_live(data, normal_cutoff=0.003, order=5):
+    b, a = butter(order, normal_cutoff, btype='high', analog=False)
+    y = lfilter(b, a, data)
+    return y
+
+
+def lowpass_filter(data, normal_cutoff=0.1, order=5):
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
     y = filtfilt(b, a, data)
     return y
 
 
-def highpass_filter(data):
-    normal_cutoff = 0.003
-    order = 5
+def highpass_filter(data, normal_cutoff=0.001, order=5):
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
     y = filtfilt(b, a, data)
     return y
 
 
-def notch_filter(data, freq, fs=1000.0, bandwidth=5):
+def notch_filter(data, freq=50, fs=480, bandwidth=5):
     nyq = 0.5 * fs
-
-    low = (freq - bandwidth) / nyq
-    high = (freq + bandwidth) / nyq
-
-    if low < 0 or high > 1:
-        raise ValueError(f"Częstotliwość {freq}Hz z pasmem {bandwidth}Hz przekracza Nyquista dla fs={fs}Hz.")
-
+    low = (freq - bandwidth/2) / nyq
+    high = (freq + bandwidth/2) / nyq
     b, a = butter(N=2, Wn=[low, high], btype='bandstop')
-
-    y = filtfilt(b, a, data)
+    y = lfilter(b, a, data)
     return y
 
 
@@ -182,19 +196,20 @@ def handle_bandpass_apply_toggle(window):
 
 
 def update_slider_labels(window):
-    if window.bandpass_apply.isChecked():
-        low_value, high_value = window.bandpass_slider.value()
-        try:
-            window.bandpass_slider._min_label.setValue(low_value)
-            if high_value <= 40:
-                window.bandpass_slider._max_label.setValue(40)
-                time.sleep(0.1)
-                QApplication.processEvents()
-            else:
-                window.bandpass_slider._max_label.setValue(high_value)
+    low_value, high_value = window.bandpass_slider.value()
+    try:
+        window.bandpass_slider._min_label.setValue(low_value)
+        if high_value <= 60:
+            window.bandpass_slider._max_label.setValue(60)
+            time.sleep(0.1)
+            QApplication.processEvents()
+        else:
+            window.bandpass_slider._max_label.setValue(high_value)
+    except AttributeError as e:
 
-        except AttributeError as e:
+
             print(f"Błąd aktualizacji etykiet: {e}")
+    if window.bandpass_apply.isChecked():
         update_bandpass_filter(window)
     else:
         print("Bandpass filter is off. Slider movement will not affect the plot.")
@@ -203,11 +218,12 @@ def update_slider_labels(window):
 def validate_bandpass_values(window):
     low_value, high_value = window.bandpass_slider.value()
 
-    if high_value < 40:
-        high_value = 40
+    if high_value < 60:
+        high_value = 60
         window.bandpass_slider.setValue((low_value, high_value))
 
     update_slider_labels(window)
+    QApplication.processEvents()
 
 
 def apply_filters(window, data):
@@ -378,7 +394,8 @@ def update_plot(window, data, time_from=None, time_to=None):
         if not visible_data.empty:
             min_y = visible_data['gradient.B'].min()
             max_y = visible_data['gradient.B'].max()
-            window.canvas.axes.set_ylim(min_y, max_y)
+            data_range = max_y - min_y
+            window.canvas.axes.set_ylim(min_y - data_range, max_y + data_range)
 
         if window.toggle_theme.isChecked():
             window.canvas.axes.set_facecolor('#2c2c2c')
@@ -439,7 +456,8 @@ def update_zoom(window, value):
     max_y = visible_data['gradient.B'].max()
 
     if not visible_data.empty:
-        window.canvas.axes.set_ylim(min_y, max_y)
+        data_range_y = max_y - min_y
+        window.canvas.axes.set_ylim(min_y - data_range_y, max_y + data_range_y)
 
     print(min_y, max_y)
 
@@ -474,7 +492,8 @@ def update_pan(window, value):
     max_y = visible_data['gradient.B'].max()
 
     if not visible_data.empty:
-        window.canvas.axes.set_ylim(min_y, max_y)
+        data_range_y = max_y - min_y
+        window.canvas.axes.set_ylim(min_y - data_range_y, max_y + data_range_y)
 
     print(min_y, max_y)
 

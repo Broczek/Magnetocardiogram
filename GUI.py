@@ -1,12 +1,15 @@
+import os
 from PyQt5.QtCore import Qt, QEvent
-from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QCheckBox, QLineEdit, QSlider, QSpacerItem, QSizePolicy
+from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QCheckBox, QLineEdit, QSlider, QSpacerItem, QSizePolicy, \
+    QMessageBox
 from PyQt5.QtGui import QIntValidator, QIcon
 import qtawesome as qta
 from data_processing import load_and_plot_file, update_plot
-from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change, handle_bandpass_apply_toggle, validate_bandpass_values, handle_filter_toggle
+from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change, \
+    handle_bandpass_apply_toggle, validate_bandpass_values, handle_filter_toggle
 from qtrangeslider import QLabeledDoubleRangeSlider
-from live_visualization import RealTimePlotWindow, reset_com_port
-import gc
+from live_visualization import RealTimePlotWindow
+from backend import IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
 
 
 class MainWindow(QMainWindow):
@@ -20,7 +23,7 @@ class MainWindow(QMainWindow):
 
         self.dark_mode = None
         self.setWindowTitle("MKG wizualizacja")
-        self.setWindowIcon(QIcon('./images/Icon.png'))
+        self.setWindowIcon(QIcon(os.path.join(IMAGES_DIR, "Icon.png")))
         self.is_active = True
 
         self.layout = QVBoxLayout()
@@ -40,22 +43,22 @@ class MainWindow(QMainWindow):
         }""")
 
         self.toggle_theme = QCheckBox()
-        self.toggle_theme.setStyleSheet("""
-            QCheckBox::indicator {
+        self.toggle_theme.setStyleSheet(f"""
+            QCheckBox::indicator {{
                 width: 40px;
                 height: 20px;
                 border-radius: 10px;
                 background-color: #ccc;
                 position: relative;
-            }
-            QCheckBox::indicator:checked {
+            }}
+            QCheckBox::indicator:checked {{
                 background-color: #2d89ef;
-                image: url(./images/dot_black.png);
-            }
-            QCheckBox::indicator:unchecked {
+                image: url("{DOT_BLACK_PATH}");
+            }}
+            QCheckBox::indicator:unchecked {{
                 background-color: #ccc;
-                image: url(./images/dot_white.png);
-            }
+                image: url("{DOT_WHITE_PATH}");
+            }}
         """)
 
         self.toggle_theme.stateChanged.connect(self.change_theme)
@@ -70,10 +73,8 @@ class MainWindow(QMainWindow):
         self.file_path_label = QLabel("No file selected")
         self.layout.addWidget(self.file_path_label, alignment=Qt.AlignLeft)
 
-        # Kontener na przyciski
         self.start_layout = QHBoxLayout()
 
-        # Przycisk analizy z pliku
         self.file_analysis_button = QPushButton("Analiza danych z pliku")
         self.file_analysis_button.setIcon(qta.icon('fa5s.file-import', color='white'))
         self.file_analysis_button.setStyleSheet("""
@@ -93,7 +94,6 @@ class MainWindow(QMainWindow):
         self.file_analysis_button.clicked.connect(self.start_file_analysis)
         self.start_layout.addWidget(self.file_analysis_button)
 
-        # Przycisk analizy w czasie rzeczywistym
         self.real_time_analysis_button = QPushButton("Analiza danych w czasie rzeczywistym")
         self.real_time_analysis_button.setIcon(qta.icon('fa5s.chart-line', color='white'))
         self.real_time_analysis_button.setStyleSheet("""
@@ -115,7 +115,6 @@ class MainWindow(QMainWindow):
 
         self.layout.addLayout(self.start_layout)
 
-        # Flaga kontroli otwartego okna analizy w czasie rzeczywistym
         self.real_time_window = None
 
         self.setFixedSize(500, 150)
@@ -229,11 +228,11 @@ class MainWindow(QMainWindow):
 
         self.bandpass_layout = QHBoxLayout()
         self.bandpass_slider = QLabeledDoubleRangeSlider(Qt.Horizontal)
-        self.bandpass_slider.setRange(1, 400)
+        self.bandpass_slider.setRange(0.5, 400)
         self.bandpass_slider.setValue((20, 200))
         self.bandpass_slider.setFixedWidth(100)
-        self.bandpass_slider.setSingleStep(1)
-        self.bandpass_slider.setDecimals(0)
+        self.bandpass_slider.setSingleStep(0.5)
+        self.bandpass_slider.setDecimals(1)
 
         self.bandpass_slider.setStyleSheet("""
             QSlider{
@@ -285,23 +284,23 @@ class MainWindow(QMainWindow):
         self.range_and_filters_layout.addLayout(self.filters_defined_layout)
         self.range_and_filters_layout.addLayout(self.custom_filters_layout)
 
-        switch_style = """
-                QCheckBox::indicator {
-                    width: 40px;
-                    height: 20px;
-                    border-radius: 10px;
-                    background-color: #ccc;
-                    position: relative;
-                }
-                QCheckBox::indicator:checked {
-                    background-color: #2d89ef;
-                    image: url(./images/dot_black.png);
-                }
-                QCheckBox::indicator:unchecked {
-                    background-color: #ccc;
-                    image: url(./images/dot_white.png);
-                }
-            """
+        switch_style = f"""
+            QCheckBox::indicator {{
+                width: 40px;
+                height: 20px;
+                border-radius: 10px;
+                background-color: #ccc;
+                position: relative;
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: #2d89ef;
+                image: url("{DOT_BLACK_PATH}");
+            }}
+            QCheckBox::indicator:unchecked {{
+                background-color: #ccc;
+                image: url("{DOT_WHITE_PATH}");
+            }}
+        """
 
         self.lowpass_filter.setStyleSheet(switch_style)
         self.highpass_filter.setStyleSheet(switch_style)
@@ -414,13 +413,12 @@ class MainWindow(QMainWindow):
         self.layout.addLayout(self.slider_layout)
 
     def start_file_analysis(self):
-        """Przełącz do trybu analizy danych z pliku."""
         load_and_plot_file(self)
 
     def start_real_time_analysis(self):
         if not hasattr(self, 'real_time_window') or self.real_time_window is None:
             self.real_time_window = RealTimePlotWindow()
-            self.real_time_window.closed.connect(self.reset_real_time_window)  # Połącz sygnał z metodą
+            self.real_time_window.closed.connect(self.reset_real_time_window)
             self.real_time_window.show()
         else:
             print("Okno analizy w czasie rzeczywistym jest już otwarte.")
@@ -429,7 +427,7 @@ class MainWindow(QMainWindow):
         print("Resetowanie flagi real_time_window.")
         self.real_time_window = None
         import gc
-        gc.collect()  # Wymuś zwolnienie pamięci
+        gc.collect()
 
     def show_controls(self):
         show_controls(self)
@@ -474,6 +472,25 @@ class MainWindow(QMainWindow):
                     background: transparent;
                     border: none;
                     color: #f0f0f0;
+                }
+                QMessageBox {
+                    background-color: #2c2c2c;
+                    color: white;
+                    border-radius: 10px;
+                }
+                QMessageBox QLabel {
+                    color: white;
+                    font-size: 14px;
+                    padding-top: 5px;
+                }
+                QMessageBox QPushButton {
+                    background-color: #555;
+                    color: white;
+                    border-radius: 15px;
+                    padding: 10px 18px;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #777;
                 }
             """)
             if self.canvas_frame:
@@ -523,6 +540,25 @@ class MainWindow(QMainWindow):
                     background: transparent;
                     border: none;
                     color: #333;
+                }
+                QMessageBox {
+                    background-color: white;
+                    color: black;
+                    border-radius: 10px;
+                }
+                QMessageBox QLabel {
+                    color: black;
+                    font-size: 14px;
+                    padding-top: 5px;
+                }
+                QMessageBox QPushButton {
+                    background-color: #2d89ef;
+                    color: white;
+                    border-radius: 15px;
+                    padding: 10px 18px;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #1e70c1;
                 }
             """)
             if self.canvas_frame:
