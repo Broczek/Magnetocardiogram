@@ -50,31 +50,31 @@ class CustomTIOSession(tio.TIOSession):
                             self.logger.debug(error)
                             return b""
 
-    def process_recv_buffer(self):
-        while slip.SLIP_END_CHAR in self.recv_buffer:
-            packet, self.recv_buffer = self.recv_buffer.split(slip.SLIP_END_CHAR, 1)
-            try:
-                decoded_packet = self.protocol.decode_packet(slip.decode(packet))
-                if decoded_packet['type'] == tio.TL_PTYPE_STREAM0:
-                    try:
-                        self.pub_queue.put(decoded_packet, block=False)
-                    except queue.Full:
-                        self.pub_queue.get()
-                        self.pub_queue.put(decoded_packet, block=False)
-                elif decoded_packet['type'] in [tio.TL_PTYPE_RPC_REP, tio.TL_PTYPE_RPC_ERROR]:
-                    try:
-                        self.rep_queue.put(decoded_packet, block=False)
-                    except queue.Full:
-                        self.rep_queue.get()
-                        self.rep_queue.put(decoded_packet, block=False)
-                        self.logger.error("Tossing an unclaimed REP!")
-                elif decoded_packet['type'] == tio.TL_PTYPE_OTHER_ROUTING:
-                    if self.recv_router is not None:
-                        self.recv_router(decoded_packet['routing'], decoded_packet['raw'])
-            except slip.SLIPEncodingError as error:
-                self.logger.debug(f"SLIP decoding error: {error}")
-            except Exception as e:
-                self.logger.error(f"Error decoding packet: {e}")
+    # def process_recv_buffer(self):
+    #     while slip.SLIP_END_CHAR in self.recv_buffer:
+    #         packet, self.recv_buffer = self.recv_buffer.split(slip.SLIP_END_CHAR, 1)
+    #         try:
+    #             decoded_packet = self.protocol.decode_packet(slip.decode(packet))
+    #             if decoded_packet['type'] == tio.TL_PTYPE_STREAM0:
+    #                 try:
+    #                     self.pub_queue.put(decoded_packet, block=False)
+    #                 except queue.Full:
+    #                     self.pub_queue.get()
+    #                     self.pub_queue.put(decoded_packet, block=False)
+    #             elif decoded_packet['type'] in [tio.TL_PTYPE_RPC_REP, tio.TL_PTYPE_RPC_ERROR]:
+    #                 try:
+    #                     self.rep_queue.put(decoded_packet, block=False)
+    #                 except queue.Full:
+    #                     self.rep_queue.get()
+    #                     self.rep_queue.put(decoded_packet, block=False)
+    #                     self.logger.error("Tossing an unclaimed REP!")
+    #             elif decoded_packet['type'] == tio.TL_PTYPE_OTHER_ROUTING:
+    #                 if self.recv_router is not None:
+    #                     self.recv_router(decoded_packet['routing'], decoded_packet['raw'])
+    #         except slip.SLIPEncodingError as error:
+    #             self.logger.debug(f"SLIP decoding error: {error}")
+    #         except Exception as e:
+    #             self.logger.error(f"Error decoding packet: {e}")
 
 
 class RealTimePlotWindow(QMainWindow):
@@ -505,7 +505,7 @@ class RealTimePlotCanvas(FigureCanvas):
                 return
 
             print("Sensor zainicjalizowany. Inicjalizacja specialize...")
-            self.session.specialize(connectingMessage=False, stateCache=False)
+            self.session.specialize(connectingMessage=True, stateCache=False)
 
             wait_start_time = time.time()
             while not self.session.protocol.streams:
