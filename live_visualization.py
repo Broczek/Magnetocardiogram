@@ -450,13 +450,16 @@ class RealTimePlotCanvas(FigureCanvas):
                                                   'data_recording') and self.parent_window.data_recording:
                     timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")
                     self.parent_window.recorded_data.append((timestamp, value))
+                    print(f"Dodano dane: {timestamp}, {value}")
 
             y_min, y_max = self.y.min(), self.y.max()
             if np.isnan(y_min) or np.isnan(y_max) or np.isinf(y_min) or np.isinf(y_max):
                 print("Nieprawidłowe dane, ustawiam domyślny zakres osi Y.")
                 self.ax1.set_ylim(-10000, 10000)
             else:
-                self.ax1.set_ylim(y_min - 10, y_max + 10)
+                data_range = y_max - y_min
+                margin = (data_range / 2) if data_range != 0 else 1
+                self.ax1.set_ylim(y_min - margin, y_max + margin)
 
             self.line1.set_data(np.arange(self.xlim), self.y)
             self.ax1.draw_artist(self.ax1.patch)
