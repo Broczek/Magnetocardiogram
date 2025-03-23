@@ -22,7 +22,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.dark_mode = None
-        self.setWindowTitle("MKG wizualizacja")
+        self.setWindowTitle("MKG visualisation")
         self.setWindowIcon(QIcon(os.path.join(IMAGES_DIR, "Icon.png")))
         self.is_active = True
 
@@ -75,7 +75,7 @@ class MainWindow(QMainWindow):
 
         self.start_layout = QHBoxLayout()
 
-        self.file_analysis_button = QPushButton("Analiza danych z pliku")
+        self.file_analysis_button = QPushButton("File data analysis")
         self.file_analysis_button.setIcon(qta.icon('fa5s.file-import', color='white'))
         self.file_analysis_button.setStyleSheet("""
                     QPushButton {
@@ -94,7 +94,7 @@ class MainWindow(QMainWindow):
         self.file_analysis_button.clicked.connect(self.start_file_analysis)
         self.start_layout.addWidget(self.file_analysis_button)
 
-        self.real_time_analysis_button = QPushButton("Analiza danych w czasie rzeczywistym")
+        self.real_time_analysis_button = QPushButton("Real-time monitoring")
         self.real_time_analysis_button.setIcon(qta.icon('fa5s.chart-line', color='white'))
         self.real_time_analysis_button.setStyleSheet("""
                     QPushButton {
@@ -421,10 +421,10 @@ class MainWindow(QMainWindow):
             self.real_time_window.closed.connect(self.reset_real_time_window)
             self.real_time_window.show()
         else:
-            print("Okno analizy w czasie rzeczywistym jest już otwarte.")
+            print("The real-time analysis window is now open")
 
     def reset_real_time_window(self):
-        print("Resetowanie flagi real_time_window.")
+        print("Resetting the real_time_window flag")
         self.real_time_window = None
         import gc
         gc.collect()

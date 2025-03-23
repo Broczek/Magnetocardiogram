@@ -124,7 +124,7 @@ class RealTimePlotWindow(QMainWindow):
         """)
         self.toggle_theme.stateChanged.connect(self.change_theme)
 
-        self.theme_label = QLabel("Tryb ciemny")
+        self.theme_label = QLabel("Dark mode")
         self.theme_label.setStyleSheet("font-size: 14px; padding: 0px;")
 
         self.dark_mode_layout = QHBoxLayout()
@@ -221,8 +221,8 @@ class RealTimePlotWindow(QMainWindow):
         self.layout.addLayout(self.top_layout)
 
         self.button_layout = QHBoxLayout()
-        self.start_recording_button = QPushButton("Rozpocznij rejestrację")
-        self.stop_recording_button = QPushButton("Zatrzymaj rejestrację")
+        self.start_recording_button = QPushButton("Start recording")
+        self.stop_recording_button = QPushButton("Stop recording")
 
         button_style = """
             QPushButton {
@@ -249,25 +249,25 @@ class RealTimePlotWindow(QMainWindow):
         self.button_layout.addWidget(self.start_recording_button)
         self.button_layout.addWidget(self.stop_recording_button)
         self.layout.addLayout(self.button_layout)
-        print("Wywołuję self.canvas.start_data_loop()")
+        print("Call self.canvas.start_data_loop()")
         self.canvas.start_data_loop()
         self.change_theme(0)
 
     def toggle_lowpass(self):
         self.lowpass_enabled = self.lowpass_filter.isChecked()
-        print(f"Filtr dolnoprzepustowy: {self.lowpass_enabled}")
+        print(f"Lowpass: {self.lowpass_enabled}")
 
     def toggle_highpass(self):
         self.highpass_enabled = self.highpass_filter.isChecked()
-        print(f"Filtr górnoprzepustowy: {self.highpass_enabled}")
+        print(f"Highpass: {self.highpass_enabled}")
 
     def toggle_notch(self):
         self.notch_enabled = self.notch_filter.isChecked()
-        print(f"Filtr 50 Hz: {self.notch_enabled}")
+        print(f"50 Hz: {self.notch_enabled}")
 
     def toggle_custom(self):
         self.custom_enabled = self.custom_filter_apply.isChecked()
-        print(f"Filtr własny: {self.custom_enabled}")
+        print(f"Custom filter: {self.custom_enabled}")
 
     def change_theme(self, state):
         if state == 2:
@@ -352,7 +352,7 @@ class RealTimePlotWindow(QMainWindow):
         self.recorded_data = []
         self.start_recording_button.setEnabled(False)
         self.stop_recording_button.setEnabled(True)
-        print(f"Rozpoczęto rejestrację danych: {self.data_recording}")
+        print(f"Data recording has begun: {self.data_recording}")
 
     def stop_recording(self):
         self.data_recording = False
@@ -363,16 +363,16 @@ class RealTimePlotWindow(QMainWindow):
             default_filename = self.record_start_time.strftime("%Y-%m-%d_%H-%M-%S")
             options = QFileDialog.Options()
             file_path, _ = QFileDialog.getSaveFileName(
-                self, "Zapisz plik", default_filename, "Pliki CSV (*.csv);;Wszystkie pliki (*)", options=options
+                self, "Save the file", default_filename, "Pliki CSV (*.csv);;Wszystkie pliki (*)", options=options
             )
             if file_path:
                 with open(file_path, "w") as file:
                     file.write("Czas, Wartość\n")
                     for timestamp, value in self.recorded_data:
                         file.write(f"{timestamp},{value}\n")
-                print(f"Dane zapisano w pliku: {file_path}")
+                print(f"The data was recorded in a file: {file_path}")
         else:
-            print("Nie zarejestrowano żadnych danych.")
+            print("No data was recorded")
 
     def closeEvent(self, event):
         print("Zamykam RealTimePlotWindow.")
@@ -384,7 +384,7 @@ class RealTimePlotWindow(QMainWindow):
             device_id = "USB\\VID_0483&PID_5740"
             reset_com_port(devcon_path, device_id)
         except Exception as e:
-            print(f"Błąd resetowania portu COM: {e}")
+            print(f"COM port reset error: {e}")
         self.closed.emit()
         super().closeEvent(event)
 
@@ -430,13 +430,13 @@ class RealTimePlotCanvas(FigureCanvas):
         self.filter_queue = queue.Queue()
         self.filter_thread = threading.Thread(target=self.filter_loop, daemon=True)
         self.filter_thread.start()
-        print("RealTimePlotCanvas.__init__ wywołane")
+        print("RealTimePlotCanvas.__init__ called")
 
     def on_destroyed(self):
-        print("RealTimePlotWindow zostało zniszczone.")
+        print("RealTimePlotWindow destroyed")
 
     def add_data(self, value):
-        print(f"add_data wywołane z wartością: {value}")
+        print(f"add_data called with the value: {value}")
         self.addedData.append(value)
 
     def update_plot(self):
@@ -450,12 +450,12 @@ class RealTimePlotCanvas(FigureCanvas):
                                                   'data_recording') and self.parent_window.data_recording:
                     timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")
                     self.parent_window.recorded_data.append((timestamp, value))
-                    print(f"Dodano dane: {timestamp}, {value}")
+                    print(f"Added data: {timestamp}, {value}")
 
             y_min, y_max = self.y.min(), self.y.max()
             if np.isnan(y_min) or np.isnan(y_max) or np.isinf(y_min) or np.isinf(y_max):
-                print("Nieprawidłowe dane, ustawiam domyślny zakres osi Y.")
-                self.ax1.set_ylim(-10000, 10000)
+                print("Incorrect data, I set the default Y-axis range.")
+                self.ax1.set_ylim(-1, 1)
             else:
                 data_range = y_max - y_min
                 margin = (data_range / 2) if data_range != 0 else 1
@@ -467,14 +467,14 @@ class RealTimePlotCanvas(FigureCanvas):
             self.blit(self.ax1.bbox)
 
         except Exception as e:
-            print(f"Błąd w update_plot: {e}")
+            print(f"Error in update_plot: {e}")
 
     def start_data_loop(self):
-        print("start_data_loop wywołane")
+        print("start_data_loop called")
         self.running = True
         self.data_thread = threading.Thread(target=self.data_loop, daemon=True)
         self.data_thread.start()
-        print("Wątek data_thread uruchomiony")
+        print("Data_thread running")
 
     def stop_data_loop(self):
         self.running = False
@@ -494,27 +494,27 @@ class RealTimePlotCanvas(FigureCanvas):
                 filtered_data = filter_func(data, *args, **kwargs)
                 callback(filtered_data)
             except Exception as e:
-                print(f"Błąd podczas filtrowania: {e}")
+                print(f"Filtering error: {e}")
 
     def data_loop(self):
-        print("data_loop wywołane")
+        print("data_loop called")
         try:
             self.session = CustomTIOSession(url="COM6", verbose=False, specialize=False)
             if not self.session:
-                print("Nie udało się zainicjalizować sensora.")
+                print("Failed to initialise sensor.")
                 return
 
-            print("Sensor zainicjalizowany. Inicjalizacja specialize...")
+            print("Sensor initialised")
             self.session.specialize(connectingMessage=False, stateCache=False)
 
             wait_start_time = time.time()
             while not self.session.protocol.streams:
                 time.sleep(0.1)
                 if time.time() - wait_start_time > 5:
-                    print("Nie udało się otrzymać informacji o strumieniu.")
+                    print("It was not possible to receive information about the stream")
                     return
 
-            print("Informacje o strumieniu odebrane. Rozpoczynam odczyt danych...")
+            print("Stream information received. Starting to read data...")
             self.running = True
             count = 0
             sample_interval = 5
@@ -524,12 +524,12 @@ class RealTimePlotCanvas(FigureCanvas):
                     decoded_packet = self.session.pub_queue.get(timeout=1)
                     if decoded_packet["type"] == tio.TL_PTYPE_STREAM0:
                         timestamp, values = self.session.protocol.stream_data(decoded_packet, timeaxis=True)
-                        ostatnia_wartosc = values[-1]
-                        print(f"Odebrano z kolejki: Czas: {timestamp}, Ostatnia wartość: {ostatnia_wartosc}")
+                        last_value = values[-1]
+                        print(f"Picked up from the queue: Time: {timestamp}, Last value: {last_value}")
 
                         count += 1
                         if count % sample_interval == 0:
-                            filtered_value = [ostatnia_wartosc]
+                            filtered_value = [last_value]
 
                             if self.parent_window.lowpass_enabled:
                                 filtered_value = lowpass_filter_live(filtered_value, normal_cutoff=0.5)
@@ -543,7 +543,7 @@ class RealTimePlotCanvas(FigureCanvas):
                                     if 1 <= custom_freq <= 999:
                                         filtered_value = notch_filter(filtered_value, custom_freq, fs=self.sample_rate)
                                 except ValueError:
-                                    print("Nieprawidłowa wartość dla filtru customowego.")
+                                    print("Incorrect value for custom filter")
 
                             self.addedData.append(filtered_value[0])
                             count = 0
@@ -551,7 +551,7 @@ class RealTimePlotCanvas(FigureCanvas):
                 except queue.Empty:
                     pass
                 except Exception as e:
-                    print(f"Błąd w data_loop: {e}")
+                    print(f"Error in data_loop: {e}")
         finally:
             if self.session:
                 self.session.close()
@@ -590,10 +590,10 @@ class RealTimePlotCanvas(FigureCanvas):
 
 def reset_com_port(devcon_path, device_id):
     try:
-        print(f"Wyłączanie urządzenia {device_id}...")
+        print(f"Switching off the device {device_id}...")
         subprocess.run([devcon_path, "disable", device_id], check=True)
         time.sleep(1)
-        print(f"Włączanie urządzenia {device_id}...")
+        print(f"Switching on the device {device_id}...")
         subprocess.run([devcon_path, "enable", device_id], check=True)
     except Exception as e:
-        print(f"Błąd resetowania urządzenia: {e}")
+        print(f"Device reset error: {e}")

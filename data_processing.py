@@ -22,7 +22,7 @@ def load_data(file_path):
             expected_columns = ['Czas', 'Wartość']
             if list(data.columns) != expected_columns:
                 raise ValueError(
-                    f"Niepoprawny format pliku. Oczekiwano nagłówków: {expected_columns}, znaleziono: {list(data.columns)}.")
+                    f"Incorrect file format. Headers expected:  {expected_columns}, found: {list(data.columns)}.")
 
             data['Czas'] = pd.to_datetime(data['Czas'], format="%H:%M:%S.%f")
             data['time'] = (data['Czas'] - data['Czas'].iloc[0]).dt.total_seconds()
@@ -50,14 +50,14 @@ def load_data(file_path):
                 data.columns = ['unknown1', 'gradient.B', 'unknown2']
                 data['time'] = data.index * 0.01
             else:
-                raise ValueError("Niepoprawny format pliku bez nagłówków. Oczekiwano 3 kolumn.")
+                raise ValueError("Incorrect file format without headers. 3 columns expected.")
 
         else:
             data = pd.read_csv(file_path, sep="\t", decimal=',', encoding=encoding)
             if 'time' in data.columns and 'gradient.B' in data.columns:
-                print("Załadowano dane z kolumny 'gradient.B'.")
+                print("Data from the ‘gradient.B’ column was loaded.")
             else:
-                raise ValueError("Niepoprawny format pliku z nagłówkami.")
+                raise ValueError("Incorrect header file format.")
 
         data['time'] = pd.to_numeric(data['time'], errors='coerce')
         data['gradient.B'] = pd.to_numeric(data['gradient.B'], errors='coerce')
