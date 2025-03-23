@@ -171,7 +171,7 @@ def notch_filter(data, freq=50, fs=480, bandwidth=5):
 
 def update_bandpass_filter(window):
     if not hasattr(window, 'original_data') or window.original_data is None:
-        print("Brak oryginalnych danych. Filtracja nie jest możliwa.")
+        print("No original data available. Filtering is not possible.")
         return
     window.filtered_data_no_bandpass = apply_filters(window, window.original_data.copy())
     if window.bandpass_apply.isChecked():
@@ -208,7 +208,7 @@ def update_slider_labels(window):
     except AttributeError as e:
 
 
-            print(f"Błąd aktualizacji etykiet: {e}")
+            print(f"Label update error: {e}")
     if window.bandpass_apply.isChecked():
         update_bandpass_filter(window)
     else:
@@ -285,7 +285,7 @@ def handle_filter_toggle(window, filter_name):
 def save_data(window):
     file_name = window.file_name_input.text()
     if not file_name:
-        print("Nazwa pliku nie może być pusta!")
+        print("The file name cannot be empty!")
         return
 
     formats = []
@@ -297,7 +297,7 @@ def save_data(window):
         formats.append("xlsx")
 
     if not formats:
-        print("Wybierz co najmniej jeden format zapisu.")
+        print("Select at least one recording format.")
         return
 
     directory = QFileDialog.getExistingDirectory(window, "Select Directory")
@@ -308,7 +308,7 @@ def save_data(window):
     os.makedirs(save_folder, exist_ok=True)
 
     if window.data is None or not hasattr(window, 'original_data'):
-        print("Brak danych do zapisania.")
+        print("No data to be saved.")
         return
 
     filtered_data = apply_filters(window, window.original_data.copy())
@@ -352,7 +352,7 @@ def update_plot(window, data, time_from=None, time_to=None):
             current_xlim = None
 
         if window.canvas_frame is None:
-            print("Tworzenie nowego kontenera dla płótna...")
+            print("Creating a new container for the canvas")
             window.canvas_frame = QFrame(window)
 
             if window.toggle_theme.isChecked():
@@ -377,7 +377,7 @@ def update_plot(window, data, time_from=None, time_to=None):
             layout_canvas.addWidget(window.canvas)
             window.canvas_frame.setLayout(layout_canvas)
             window.canvas_layout.addWidget(window.canvas_frame)
-            print("Płótno wykresu zostało stworzone i dodane do kontenera.")
+            print("The plot canvas has been created and added to the container")
 
         window.canvas.figure.clf()
         window.canvas.axes = window.canvas.figure.add_subplot(111)
