@@ -15,6 +15,7 @@ import tio
 import slip
 import serial
 from backend import lowpass_filter_live, highpass_filter_live, notch_filter, validate_custom_filter, state_change, IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
+from collections import deque
 
 
 class FilterWorkerSignals(QObject):
@@ -401,7 +402,7 @@ class RealTimePlotCanvas(FigureCanvas):
         self.parent_window = None
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.destroyed.connect(self.on_destroyed)
-        self.xlim = 1000
+        self.xlim = 960
         self.n = np.linspace(0, self.xlim - 1, self.xlim)
         self.y = np.zeros(self.xlim)
 
@@ -425,6 +426,8 @@ class RealTimePlotCanvas(FigureCanvas):
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
         self.sample_rate = 480
+        self.buffer = deque(maxlen=2000)  # pełny bufor
+        self.delay = 50  # opóźnienie prezentacji
         self.threadpool = QThreadPool()
         self.filter_queue = queue.Queue()
         self.filter_thread = threading.Thread(target=self.filter_loop, daemon=True)
@@ -440,20 +443,42 @@ class RealTimePlotCanvas(FigureCanvas):
 
     def update_plot(self):
         try:
-            while self.addedData:
-                value = self.addedData.pop(0)
-                self.y = np.roll(self.y, -1)
-                self.y[-1] = value
+            if len(self.buffer) < self.delay + 10:
+                return  # za mało danych do sensownego filtrowania
 
-                if self.parent_window and hasattr(self.parent_window,
-                                                  'data_recording') and self.parent_window.data_recording:
-                    timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")
-                    self.parent_window.recorded_data.append((timestamp, value))
-                    print(f"Added data: {timestamp}, {value}")
+            # Skopiuj dane z bufora
+            raw_data = list(self.buffer)
+            y_filtered = np.array(raw_data)
+
+            if self.parent_window.lowpass_enabled:
+                y_filtered = lowpass_filter_live(y_filtered, normal_cutoff=0.2917)
+            if self.parent_window.highpass_enabled:
+                y_filtered = highpass_filter_live(y_filtered, normal_cutoff=0.0125)
+            if self.parent_window.notch_enabled:
+                y_filtered = notch_filter(y_filtered, freq=50, fs=self.sample_rate)
+            if self.parent_window.custom_enabled:
+                try:
+                    text = self.parent_window.custom_filter_input.text()
+                    if text.strip().isdigit():
+                        custom_freq = int(text)
+                        if 1 <= custom_freq <= 999:
+                            y_filtered = notch_filter(y_filtered, custom_freq, fs=self.sample_rate)
+                except:
+                    pass
+
+            # Dodaj opóźnienie, by ominąć brzegowe wzbudzenia
+            display_value = y_filtered[-self.delay]
+
+            self.y = np.roll(self.y, -1)
+            self.y[-1] = display_value
+
+            if self.parent_window and hasattr(self.parent_window,
+                                              'data_recording') and self.parent_window.data_recording:
+                timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")
+                self.parent_window.recorded_data.append((timestamp, display_value))
 
             y_min, y_max = self.y.min(), self.y.max()
             if np.isnan(y_min) or np.isnan(y_max) or np.isinf(y_min) or np.isinf(y_max):
-                print("Incorrect data, I set the default Y-axis range.")
                 self.ax1.set_ylim(-1, 1)
             else:
                 data_range = y_max - y_min
@@ -505,68 +530,39 @@ class RealTimePlotCanvas(FigureCanvas):
 
             print("Sensor initialised")
             self.session.specialize(connectingMessage=True, stateCache=False)
-
             wait_start_time = time.time()
             while not self.session.protocol.streams:
                 time.sleep(0.1)
                 if time.time() - wait_start_time > 5:
-                    print("It was not possible to receive information about the stream")
+                    print("Stream info not received in time.")
                     return
 
             self.session.rpc_val("gradient.data.decimation", tio.UINT32_T, 1)
+            print("Stream ready. Reading data...")
 
-            print("Stream information received. Starting to read data...")
             self.running = True
-            count = 0
-            sample_interval = 1
+            columns = self.session.protocol.columns
+            if "gradient" not in columns:
+                print("gradient not in columns:", columns)
+                return
+            gradient_index = columns.index("gradient")
 
             while self.running:
                 try:
                     decoded_packet = self.session.pub_queue.get(timeout=1)
-                    if decoded_packet["type"] == tio.TL_PTYPE_STREAM0:
-                        result = self.session.protocol.stream_data(decoded_packet, timeaxis=True)
+                    if decoded_packet["type"] != tio.TL_PTYPE_STREAM0:
+                        continue
 
-                        if not isinstance(result, tuple) or len(result) < 2:
-                            print("Nieprawidłowy wynik stream_data:", result)
-                            continue
+                    result = self.session.protocol.stream_data(decoded_packet, timeaxis=True)
+                    if not isinstance(result, tuple) or len(result) < 2:
+                        continue
+                    timestamp, values = result
 
-                        timestamp, values = result
+                    if len(values) <= gradient_index:
+                        continue
+                    gradient_value = values[gradient_index]
 
-                        columns = self.session.protocol.columns
-                        if "gradient" not in columns:
-                            print("gradient not found in active columns:", columns)
-                            continue
-                        gradient_index = columns.index("gradient")
-
-                        if not values or len(values) <= gradient_index:
-                            print("Zbyt krótka lista values:", values)
-                            continue
-                        last_value = values[gradient_index]
-
-                        print("Start: columns =", self.session.protocol.columns)
-                        print("Gradient index:", gradient_index)
-                        print(f"Picked up from the queue: Time: {timestamp}, Gradient value: {last_value}")
-
-                        count += 1
-                        if count % sample_interval == 0:
-                            filtered_value = [last_value]
-
-                            if self.parent_window.lowpass_enabled:
-                                filtered_value = lowpass_filter_live(filtered_value, normal_cutoff=0.5)
-                            if self.parent_window.highpass_enabled:
-                                filtered_value = highpass_filter_live(filtered_value, normal_cutoff=0.01)
-                            if self.parent_window.notch_enabled:
-                                filtered_value = notch_filter(filtered_value, 50)
-                            if self.parent_window.custom_enabled:
-                                try:
-                                    custom_freq = int(self.parent_window.custom_filter_input.text())
-                                    if 1 <= custom_freq <= 999:
-                                        filtered_value = notch_filter(filtered_value, custom_freq, fs=self.sample_rate)
-                                except ValueError:
-                                    print("Incorrect value for custom filter")
-
-                            self.addedData.append(filtered_value[0])
-                            count = 0
+                    self.buffer.append(gradient_value)
 
                 except queue.Empty:
                     pass

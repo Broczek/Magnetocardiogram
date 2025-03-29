@@ -138,13 +138,13 @@ def bandpass_filter(data, lowcut, highcut, fs=1000.0, order=5):
 
 def lowpass_filter_live(data, normal_cutoff=0.08, order=5):
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    y = lfilter(b, a, data)
+    y = filtfilt(b, a, data)
     return y
 
 
 def highpass_filter_live(data, normal_cutoff=0.003, order=5):
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
-    y = lfilter(b, a, data)
+    y = filtfilt(b, a, data)
     return y
 
 
@@ -162,10 +162,10 @@ def highpass_filter(data, normal_cutoff=0.001, order=5):
 
 def notch_filter(data, freq=50, fs=480, bandwidth=5):
     nyq = 0.5 * fs
-    low = (freq - bandwidth/2) / nyq
-    high = (freq + bandwidth/2) / nyq
+    low = (freq - bandwidth / 2) / nyq
+    high = (freq + bandwidth / 2) / nyq
     b, a = butter(N=2, Wn=[low, high], btype='bandstop')
-    y = lfilter(b, a, data)
+    y = filtfilt(b, a, data)
     return y
 
 
