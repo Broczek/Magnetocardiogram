@@ -401,14 +401,13 @@ class RealTimePlotCanvas(FigureCanvas):
         self.parent_window = None
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.destroyed.connect(self.on_destroyed)
-        self.xlim = 800
+        self.xlim = 1000
         self.n = np.linspace(0, self.xlim - 1, self.xlim)
         self.y = np.zeros(self.xlim)
 
         self.fig = Figure(figsize=(5, 5), dpi=100)
         self.ax1 = self.fig.add_subplot(111)
         self.ax1.set_xlim(0, self.xlim - 1)
-        self.ax1.set_ylim(-900, -600)
         self.ax1.set_xlabel('Index')
         self.ax1.set_ylabel('Sensor Value')
 
@@ -505,7 +504,7 @@ class RealTimePlotCanvas(FigureCanvas):
                 return
 
             print("Sensor initialised")
-            self.session.specialize(connectingMessage=False, stateCache=False)
+            self.session.specialize(connectingMessage=True, stateCache=False)
 
             wait_start_time = time.time()
             while not self.session.protocol.streams:
@@ -514,18 +513,39 @@ class RealTimePlotCanvas(FigureCanvas):
                     print("It was not possible to receive information about the stream")
                     return
 
+            self.session.rpc_val("gradient.data.decimation", tio.UINT32_T, 1)
+
             print("Stream information received. Starting to read data...")
             self.running = True
             count = 0
-            sample_interval = 5
+            sample_interval = 1
 
             while self.running:
                 try:
                     decoded_packet = self.session.pub_queue.get(timeout=1)
                     if decoded_packet["type"] == tio.TL_PTYPE_STREAM0:
-                        timestamp, values = self.session.protocol.stream_data(decoded_packet, timeaxis=True)
-                        last_value = values[-1]
-                        print(f"Picked up from the queue: Time: {timestamp}, Last value: {last_value}")
+                        result = self.session.protocol.stream_data(decoded_packet, timeaxis=True)
+
+                        if not isinstance(result, tuple) or len(result) < 2:
+                            print("Nieprawidłowy wynik stream_data:", result)
+                            continue
+
+                        timestamp, values = result
+
+                        columns = self.session.protocol.columns
+                        if "gradient" not in columns:
+                            print("gradient not found in active columns:", columns)
+                            continue
+                        gradient_index = columns.index("gradient")
+
+                        if not values or len(values) <= gradient_index:
+                            print("Zbyt krótka lista values:", values)
+                            continue
+                        last_value = values[gradient_index]
+
+                        print("Start: columns =", self.session.protocol.columns)
+                        print("Gradient index:", gradient_index)
+                        print(f"Picked up from the queue: Time: {timestamp}, Gradient value: {last_value}")
 
                         count += 1
                         if count % sample_interval == 0:

@@ -199,8 +199,8 @@ def update_slider_labels(window):
     low_value, high_value = window.bandpass_slider.value()
     try:
         window.bandpass_slider._min_label.setValue(low_value)
-        if high_value <= 60:
-            window.bandpass_slider._max_label.setValue(60)
+        if high_value <= 40:
+            window.bandpass_slider._max_label.setValue(40)
             time.sleep(0.1)
             QApplication.processEvents()
         else:
@@ -218,8 +218,8 @@ def update_slider_labels(window):
 def validate_bandpass_values(window):
     low_value, high_value = window.bandpass_slider.value()
 
-    if high_value < 60:
-        high_value = 60
+    if high_value < 40:
+        high_value = 40
         window.bandpass_slider.setValue((low_value, high_value))
 
     update_slider_labels(window)

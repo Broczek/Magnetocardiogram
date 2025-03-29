@@ -13,7 +13,7 @@ record_start_time = datetime.now()
 recorded_data = []
 file_path = os.path.join(os.getcwd(), "data.csv")
 
-for n in range(0, 50000):
+for n in range(0, 10000):
     decoded_packet = session.pub_queue.get(timeout=1)
     if decoded_packet["type"] == tio.TL_PTYPE_STREAM0:
         timestamp, values = session.protocol.stream_data(decoded_packet, timeaxis=True)
