@@ -5,7 +5,8 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog, QApplication
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from scipy.signal import butter, filtfilt, lfilter
+from scipy.signal import butter, filtfilt
+import serial.tools.list_ports
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
@@ -24,6 +25,14 @@ class MplCanvas(FigureCanvas):
         self.axes = fig.add_subplot(111)
         super().__init__(fig)
         self.setStyleSheet("background-color: transparent;")
+
+
+def detect_sensor_port():
+    ports = serial.tools.list_ports.comports()
+    for port in ports:
+        if port.vid == 0x0483 and port.pid == 0x5740:
+            return port.device
+    return None
 
 
 def state_change(window):
@@ -148,13 +157,13 @@ def highpass_filter_live(data, normal_cutoff=0.003, order=5):
     return y
 
 
-def lowpass_filter(data, normal_cutoff=0.1, order=5):
+def lowpass_filter(data, normal_cutoff=0.45, order=5):
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
     y = filtfilt(b, a, data)
     return y
 
 
-def highpass_filter(data, normal_cutoff=0.001, order=5):
+def highpass_filter(data, normal_cutoff=0.01, order=5):
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
     y = filtfilt(b, a, data)
     return y

@@ -1,4 +1,5 @@
 import os
+import sys
 from PyQt5.QtGui import QIntValidator, QIcon
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QFileDialog, QPushButton, QHBoxLayout, QCheckBox, QLabel, \
     QSizePolicy, QFrame, QLineEdit
@@ -14,8 +15,15 @@ import queue
 import tio
 import slip
 import serial
-from backend import lowpass_filter_live, highpass_filter_live, notch_filter, validate_custom_filter, state_change, IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
+from backend import lowpass_filter_live, highpass_filter_live, notch_filter, validate_custom_filter, state_change, detect_sensor_port, IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
 from collections import deque
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DEVCON_PATH = os.path.join(BASE_DIR, "devcon.exe").replace("\\", "/")
 
 
 class FilterWorkerSignals(QObject):
@@ -41,7 +49,7 @@ class CustomTIOSession(tio.TIOSession):
             else:
                 if data:
                     self.buffer.extend(data)
-                    if len(self.buffer) > 200000:
+                    if len(self.buffer) > 1000000:
                         self.warn_overload()
                     while slip.SLIP_END_CHAR in self.buffer:
                         packet, self.buffer = self.buffer.split(slip.SLIP_END_CHAR, 1)
@@ -381,9 +389,7 @@ class RealTimePlotWindow(QMainWindow):
         try:
             if self.canvas.session:
                 self.canvas.session.close()
-            devcon_path = r"C:\Program Files (x86)\Windows Kits\10\Tools\x64\devcon.exe"
-            device_id = "USB\\VID_0483&PID_5740"
-            reset_com_port(devcon_path, device_id)
+            reset_com_port()
         except Exception as e:
             print(f"COM port reset error: {e}")
         self.closed.emit()
@@ -402,7 +408,7 @@ class RealTimePlotCanvas(FigureCanvas):
         self.parent_window = None
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.destroyed.connect(self.on_destroyed)
-        self.xlim = 960
+        self.xlim = 300
         self.n = np.linspace(0, self.xlim - 1, self.xlim)
         self.y = np.zeros(self.xlim)
 
@@ -502,10 +508,19 @@ class RealTimePlotCanvas(FigureCanvas):
 
     def stop_data_loop(self):
         self.running = False
+
         if self.data_thread is not None and self.data_thread.is_alive():
-            self.data_thread.join()
+            self.data_thread.join(timeout=2)
+
         if self.session:
+            self.session.alive = False
+            time.sleep(1)
             self.session.close()
+            try:
+                if self.session.serial.is_open:
+                    self.session.serial.close()
+            except Exception as e:
+                print(f"Serial close error: {e}")
 
     def filter_loop(self):
         while True:
@@ -523,7 +538,8 @@ class RealTimePlotCanvas(FigureCanvas):
     def data_loop(self):
         print("data_loop called")
         try:
-            self.session = CustomTIOSession(url="COM6", verbose=False, specialize=False)
+            sensor_port = detect_sensor_port()
+            self.session = CustomTIOSession(url=sensor_port, verbose=False, specialize=False)
             if not self.session:
                 print("Failed to initialise sensor.")
                 return
@@ -604,12 +620,12 @@ class RealTimePlotCanvas(FigureCanvas):
         self.draw()
 
 
-def reset_com_port(devcon_path, device_id):
+def reset_com_port():
+    device_id = "USB\\VID_0483&PID_5740\\OMG16"
     try:
-        print(f"Switching off the device {device_id}...")
-        subprocess.run([devcon_path, "disable", device_id], check=True)
-        time.sleep(1)
-        print(f"Switching on the device {device_id}...")
-        subprocess.run([devcon_path, "enable", device_id], check=True)
-    except Exception as e:
+        print("Attempting COM port reset via devcon...")
+        subprocess.run([DEVCON_PATH, "restart", device_id], check=True)
+        print("COM port reset via devcon completed.")
+    except subprocess.CalledProcessError as e:
         print(f"Device reset error: {e}")
+
