@@ -22,7 +22,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.dark_mode = None
-        self.setWindowTitle("MKG wizualizacja")
+        self.setWindowTitle("MKG visualisation")
         self.setWindowIcon(QIcon(os.path.join(IMAGES_DIR, "Icon.png")))
         self.is_active = True
 
@@ -75,7 +75,7 @@ class MainWindow(QMainWindow):
 
         self.start_layout = QHBoxLayout()
 
-        self.file_analysis_button = QPushButton("Analiza danych z pliku")
+        self.file_analysis_button = QPushButton("File data analysis")
         self.file_analysis_button.setIcon(qta.icon('fa5s.file-import', color='white'))
         self.file_analysis_button.setStyleSheet("""
                     QPushButton {
@@ -94,7 +94,7 @@ class MainWindow(QMainWindow):
         self.file_analysis_button.clicked.connect(self.start_file_analysis)
         self.start_layout.addWidget(self.file_analysis_button)
 
-        self.real_time_analysis_button = QPushButton("Analiza danych w czasie rzeczywistym")
+        self.real_time_analysis_button = QPushButton("Real-time monitoring")
         self.real_time_analysis_button.setIcon(qta.icon('fa5s.chart-line', color='white'))
         self.real_time_analysis_button.setStyleSheet("""
                     QPushButton {
@@ -200,9 +200,9 @@ class MainWindow(QMainWindow):
 
         self.custom_filter1_layout = QHBoxLayout()
         self.custom_filter_1_input = QLineEdit()
-        self.custom_filter_1_input.setPlaceholderText("1-999Hz")
+        self.custom_filter_1_input.setPlaceholderText("1-230Hz")
         self.custom_filter_1_input.setFixedWidth(100)
-        self.custom_filter_1_validator = QIntValidator(1, 999, self)
+        self.custom_filter_1_validator = QIntValidator(1, 230, self)
         self.custom_filter_1_input.setValidator(self.custom_filter_1_validator)
         self.custom_filter_1_input.textChanged.connect(lambda: validate_custom_filter(self.custom_filter_1_input, self.custom_filter_1_apply))
         self.custom_filter1_layout.addWidget(self.custom_filter_1_input, alignment=Qt.AlignTop)
@@ -214,9 +214,9 @@ class MainWindow(QMainWindow):
 
         self.custom_filter2_layout = QHBoxLayout()
         self.custom_filter_2_input = QLineEdit()
-        self.custom_filter_2_input.setPlaceholderText("1-999Hz")
+        self.custom_filter_2_input.setPlaceholderText("1-230Hz")
         self.custom_filter_2_input.setFixedWidth(100)
-        self.custom_filter_2_validator = QIntValidator(1, 999, self)
+        self.custom_filter_2_validator = QIntValidator(1, 230, self)
         self.custom_filter_2_input.setValidator(self.custom_filter_2_validator)
         self.custom_filter_2_input.textChanged.connect(lambda: validate_custom_filter(self.custom_filter_2_input, self.custom_filter_2_apply))
         self.custom_filter2_layout.addWidget(self.custom_filter_2_input, alignment=Qt.AlignTop)
@@ -228,8 +228,8 @@ class MainWindow(QMainWindow):
 
         self.bandpass_layout = QHBoxLayout()
         self.bandpass_slider = QLabeledDoubleRangeSlider(Qt.Horizontal)
-        self.bandpass_slider.setRange(0.5, 400)
-        self.bandpass_slider.setValue((20, 200))
+        self.bandpass_slider.setRange(0.5, 230)
+        self.bandpass_slider.setValue((4, 90))
         self.bandpass_slider.setFixedWidth(100)
         self.bandpass_slider.setSingleStep(0.5)
         self.bandpass_slider.setDecimals(1)
@@ -421,16 +421,51 @@ class MainWindow(QMainWindow):
             self.real_time_window.closed.connect(self.reset_real_time_window)
             self.real_time_window.show()
         else:
-            print("Okno analizy w czasie rzeczywistym jest już otwarte.")
+            print("The real-time analysis window is now open")
 
     def reset_real_time_window(self):
-        print("Resetowanie flagi real_time_window.")
+        print("Resetting the real_time_window flag")
         self.real_time_window = None
         import gc
         gc.collect()
 
     def show_controls(self):
         show_controls(self)
+
+    def reset_controls_to_default(self):
+        self.pan_slider.setEnabled(False)
+
+        self.bandpass_slider.setValue((3, 80))
+        self.bandpass_apply.setChecked(False)
+
+        self.lowpass_filter.setChecked(False)
+        self.highpass_filter.setChecked(False)
+        self.filter_50hz.setChecked(False)
+        self.filter_100hz.setChecked(False)
+        self.filter_150hz.setChecked(False)
+        self.custom_filter_1_input.clear()
+        self.custom_filter_1_apply.setChecked(False)
+        self.custom_filter_2_input.clear()
+        self.custom_filter_2_apply.setChecked(False)
+
+        self.time_from_input.clear()
+        self.time_from_input.setStyleSheet("border: 1px solid #ccc; border-radius: 10px;")
+        self.error_from_label.clear()
+        self.error_from_label.hide()
+
+        self.time_to_input.clear()
+        self.time_to_input.setStyleSheet("border: 1px solid #ccc; border-radius: 10px;")
+        self.error_to_label.clear()
+        self.error_to_label.hide()
+
+        self.file_name_input.clear()
+        self.save_txt.setChecked(False)
+        self.save_tsv.setChecked(False)
+        self.save_xlsx.setChecked(False)
+
+        self.current_time_from = None
+        self.current_time_to = None
+        self.data = None
 
     def change_theme(self, state):
         if state == 2:

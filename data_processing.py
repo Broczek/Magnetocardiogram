@@ -14,20 +14,34 @@ def load_data(file_path):
             lines = file.readlines()
 
         header_line = lines[0].strip()
-        if "Czas" in header_line and "Wartość" in header_line:
+
+        if "Timestamp" in header_line and "MKG Value" in header_line:
+            data = pd.read_csv(file_path, header=0, sep=",", decimal='.', encoding=encoding)
+            data.columns = [col.strip() for col in data.columns]
+
+            if 'Timestamp' not in data.columns or 'MKG Value' not in data.columns:
+                raise ValueError("File must contain 'Timestamp' and 'MKG Value' columns.")
+
+            data['Timestamp'] = pd.to_datetime(data['Timestamp'], format="%H:%M:%S.%f")
+            data['time'] = (data['Timestamp'] - data['Timestamp'].iloc[0]).dt.total_seconds()
+
+            data = data.rename(columns={'MKG Value': 'gradient.B'})
+            data = data[['time', 'gradient.B']]
+
+        elif "Time" in header_line and "Value" in header_line:
             data = pd.read_csv(file_path, header=0, sep=",", decimal='.', encoding=encoding)
 
             data.columns = [col.strip().capitalize() for col in data.columns]
 
-            expected_columns = ['Czas', 'Wartość']
+            expected_columns = ['Time', 'Value']
             if list(data.columns) != expected_columns:
                 raise ValueError(
-                    f"Niepoprawny format pliku. Oczekiwano nagłówków: {expected_columns}, znaleziono: {list(data.columns)}.")
+                    f"Incorrect file format. Headers expected:  {expected_columns}, found: {list(data.columns)}.")
 
-            data['Czas'] = pd.to_datetime(data['Czas'], format="%H:%M:%S.%f")
-            data['time'] = (data['Czas'] - data['Czas'].iloc[0]).dt.total_seconds()
+            data['Time'] = pd.to_datetime(data['Time'], format="%H:%M:%S.%f")
+            data['time'] = (data['Time'] - data['Time'].iloc[0]).dt.total_seconds()
 
-            data = data.rename(columns={'Wartość': 'gradient.B'})
+            data = data.rename(columns={'Value': 'gradient.B'})
 
             data = data[['time', 'gradient.B']]
 
@@ -50,14 +64,14 @@ def load_data(file_path):
                 data.columns = ['unknown1', 'gradient.B', 'unknown2']
                 data['time'] = data.index * 0.01
             else:
-                raise ValueError("Niepoprawny format pliku bez nagłówków. Oczekiwano 3 kolumn.")
+                raise ValueError("Incorrect file format without headers. 3 columns expected.")
 
         else:
             data = pd.read_csv(file_path, sep="\t", decimal=',', encoding=encoding)
             if 'time' in data.columns and 'gradient.B' in data.columns:
-                print("Załadowano dane z kolumny 'gradient.B'.")
+                print("Data from the ‘gradient.B’ column was loaded.")
             else:
-                raise ValueError("Niepoprawny format pliku z nagłówkami.")
+                raise ValueError("Incorrect header file format.")
 
         data['time'] = pd.to_numeric(data['time'], errors='coerce')
         data['gradient.B'] = pd.to_numeric(data['gradient.B'], errors='coerce')
@@ -70,21 +84,21 @@ def load_data(file_path):
         return None
 
 
-def adjust_duplicate_timestamps(data, time_column='time', time_step=0.001):
-    data = data.sort_values(by=[time_column]).reset_index(drop=True)
-    seen_timestamps = set()
+def aggregate_duplicate_timestamps(data, time_column='time', value_column='gradient.B', method='mean'):
 
-    for idx in range(len(data)):
-        original_time = data.loc[idx, time_column]
-        while original_time in seen_timestamps:
-            original_time += time_step
-        seen_timestamps.add(original_time)
-        data.loc[idx, time_column] = original_time
+    if method == 'mean':
+        agg_func = 'mean'
+    elif method == 'median':
+        agg_func = 'median'
+    elif method == 'max':
+        agg_func = 'max'
+    elif method == 'min':
+        agg_func = 'min'
+    else:
+        raise ValueError("Unknown aggregation method")
 
-    print("Adjusted timestamps (first 10 rows):")
-    print(data[[time_column]].head(10))
-
-    return data
+    data_agg = data.groupby(time_column, as_index=False).agg({value_column: agg_func})
+    return data_agg
 
 
 def load_and_plot_file(window):
@@ -100,7 +114,8 @@ def load_and_plot_file(window):
 
             data = load_data(file_path)
             if data is not None:
-                data = adjust_duplicate_timestamps(data, time_column='time', time_step=0.001)
+                window.reset_controls_to_default()
+                data = aggregate_duplicate_timestamps(data, time_column='time', value_column='gradient.B', method='mean')
 
                 window.original_data = data.copy()
                 window.data = data
@@ -115,6 +130,7 @@ def load_and_plot_file(window):
                 window.show_controls()
             else:
                 QMessageBox.warning(window, "Warning", "Failed to load data from the file. Please check the file format.")
+            window.pan_slider.setEnabled(False)
         except Exception as e:
             QMessageBox.critical(window, "Error", f"Error reading file: {e}")
             print(f"Error reading file: {e}")

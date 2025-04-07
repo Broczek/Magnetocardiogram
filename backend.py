@@ -5,7 +5,8 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog, QApplication
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from scipy.signal import butter, filtfilt, lfilter
+from scipy.signal import butter, filtfilt
+import serial.tools.list_ports
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
@@ -24,6 +25,14 @@ class MplCanvas(FigureCanvas):
         self.axes = fig.add_subplot(111)
         super().__init__(fig)
         self.setStyleSheet("background-color: transparent;")
+
+
+def detect_sensor_port():
+    ports = serial.tools.list_ports.comports()
+    for port in ports:
+        if port.vid == 0x0483 and port.pid == 0x5740:
+            return port.device
+    return None
 
 
 def state_change(window):
@@ -127,7 +136,7 @@ def apply_time_range(window):
             pass
 
 
-def bandpass_filter(data, lowcut, highcut, fs=1000.0, order=5):
+def bandpass_filter(data, lowcut, highcut, fs=480, order=5):
     nyq = 0.5 * fs
     low = lowcut / nyq
     high = highcut / nyq
@@ -138,23 +147,23 @@ def bandpass_filter(data, lowcut, highcut, fs=1000.0, order=5):
 
 def lowpass_filter_live(data, normal_cutoff=0.08, order=5):
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    y = lfilter(b, a, data)
+    y = filtfilt(b, a, data)
     return y
 
 
 def highpass_filter_live(data, normal_cutoff=0.003, order=5):
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
-    y = lfilter(b, a, data)
+    y = filtfilt(b, a, data)
     return y
 
 
-def lowpass_filter(data, normal_cutoff=0.1, order=5):
+def lowpass_filter(data, normal_cutoff=0.45, order=5):
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
     y = filtfilt(b, a, data)
     return y
 
 
-def highpass_filter(data, normal_cutoff=0.001, order=5):
+def highpass_filter(data, normal_cutoff=0.01, order=5):
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
     y = filtfilt(b, a, data)
     return y
@@ -162,16 +171,16 @@ def highpass_filter(data, normal_cutoff=0.001, order=5):
 
 def notch_filter(data, freq=50, fs=480, bandwidth=5):
     nyq = 0.5 * fs
-    low = (freq - bandwidth/2) / nyq
-    high = (freq + bandwidth/2) / nyq
+    low = (freq - bandwidth / 2) / nyq
+    high = (freq + bandwidth / 2) / nyq
     b, a = butter(N=2, Wn=[low, high], btype='bandstop')
-    y = lfilter(b, a, data)
+    y = filtfilt(b, a, data)
     return y
 
 
 def update_bandpass_filter(window):
     if not hasattr(window, 'original_data') or window.original_data is None:
-        print("Brak oryginalnych danych. Filtracja nie jest możliwa.")
+        print("No original data available. Filtering is not possible.")
         return
     window.filtered_data_no_bandpass = apply_filters(window, window.original_data.copy())
     if window.bandpass_apply.isChecked():
@@ -199,8 +208,8 @@ def update_slider_labels(window):
     low_value, high_value = window.bandpass_slider.value()
     try:
         window.bandpass_slider._min_label.setValue(low_value)
-        if high_value <= 60:
-            window.bandpass_slider._max_label.setValue(60)
+        if high_value <= 40:
+            window.bandpass_slider._max_label.setValue(40)
             time.sleep(0.1)
             QApplication.processEvents()
         else:
@@ -208,7 +217,7 @@ def update_slider_labels(window):
     except AttributeError as e:
 
 
-            print(f"Błąd aktualizacji etykiet: {e}")
+            print(f"Label update error: {e}")
     if window.bandpass_apply.isChecked():
         update_bandpass_filter(window)
     else:
@@ -218,8 +227,8 @@ def update_slider_labels(window):
 def validate_bandpass_values(window):
     low_value, high_value = window.bandpass_slider.value()
 
-    if high_value < 60:
-        high_value = 60
+    if high_value < 40:
+        high_value = 40
         window.bandpass_slider.setValue((low_value, high_value))
 
     update_slider_labels(window)
@@ -285,7 +294,7 @@ def handle_filter_toggle(window, filter_name):
 def save_data(window):
     file_name = window.file_name_input.text()
     if not file_name:
-        print("Nazwa pliku nie może być pusta!")
+        print("The file name cannot be empty!")
         return
 
     formats = []
@@ -297,7 +306,7 @@ def save_data(window):
         formats.append("xlsx")
 
     if not formats:
-        print("Wybierz co najmniej jeden format zapisu.")
+        print("Select at least one recording format.")
         return
 
     directory = QFileDialog.getExistingDirectory(window, "Select Directory")
@@ -308,7 +317,7 @@ def save_data(window):
     os.makedirs(save_folder, exist_ok=True)
 
     if window.data is None or not hasattr(window, 'original_data'):
-        print("Brak danych do zapisania.")
+        print("No data to be saved.")
         return
 
     filtered_data = apply_filters(window, window.original_data.copy())
@@ -352,7 +361,7 @@ def update_plot(window, data, time_from=None, time_to=None):
             current_xlim = None
 
         if window.canvas_frame is None:
-            print("Tworzenie nowego kontenera dla płótna...")
+            print("Creating a new container for the canvas")
             window.canvas_frame = QFrame(window)
 
             if window.toggle_theme.isChecked():
@@ -377,7 +386,7 @@ def update_plot(window, data, time_from=None, time_to=None):
             layout_canvas.addWidget(window.canvas)
             window.canvas_frame.setLayout(layout_canvas)
             window.canvas_layout.addWidget(window.canvas_frame)
-            print("Płótno wykresu zostało stworzone i dodane do kontenera.")
+            print("The plot canvas has been created and added to the container")
 
         window.canvas.figure.clf()
         window.canvas.axes = window.canvas.figure.add_subplot(111)
