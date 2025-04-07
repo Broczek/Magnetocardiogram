@@ -136,7 +136,7 @@ def apply_time_range(window):
             pass
 
 
-def bandpass_filter(data, lowcut, highcut, fs=1000.0, order=5):
+def bandpass_filter(data, lowcut, highcut, fs=480, order=5):
     nyq = 0.5 * fs
     low = lowcut / nyq
     high = highcut / nyq

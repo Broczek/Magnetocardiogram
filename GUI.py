@@ -200,9 +200,9 @@ class MainWindow(QMainWindow):
 
         self.custom_filter1_layout = QHBoxLayout()
         self.custom_filter_1_input = QLineEdit()
-        self.custom_filter_1_input.setPlaceholderText("1-999Hz")
+        self.custom_filter_1_input.setPlaceholderText("1-230Hz")
         self.custom_filter_1_input.setFixedWidth(100)
-        self.custom_filter_1_validator = QIntValidator(1, 999, self)
+        self.custom_filter_1_validator = QIntValidator(1, 230, self)
         self.custom_filter_1_input.setValidator(self.custom_filter_1_validator)
         self.custom_filter_1_input.textChanged.connect(lambda: validate_custom_filter(self.custom_filter_1_input, self.custom_filter_1_apply))
         self.custom_filter1_layout.addWidget(self.custom_filter_1_input, alignment=Qt.AlignTop)
@@ -214,9 +214,9 @@ class MainWindow(QMainWindow):
 
         self.custom_filter2_layout = QHBoxLayout()
         self.custom_filter_2_input = QLineEdit()
-        self.custom_filter_2_input.setPlaceholderText("1-999Hz")
+        self.custom_filter_2_input.setPlaceholderText("1-230Hz")
         self.custom_filter_2_input.setFixedWidth(100)
-        self.custom_filter_2_validator = QIntValidator(1, 999, self)
+        self.custom_filter_2_validator = QIntValidator(1, 230, self)
         self.custom_filter_2_input.setValidator(self.custom_filter_2_validator)
         self.custom_filter_2_input.textChanged.connect(lambda: validate_custom_filter(self.custom_filter_2_input, self.custom_filter_2_apply))
         self.custom_filter2_layout.addWidget(self.custom_filter_2_input, alignment=Qt.AlignTop)
@@ -228,8 +228,8 @@ class MainWindow(QMainWindow):
 
         self.bandpass_layout = QHBoxLayout()
         self.bandpass_slider = QLabeledDoubleRangeSlider(Qt.Horizontal)
-        self.bandpass_slider.setRange(0.5, 400)
-        self.bandpass_slider.setValue((20, 200))
+        self.bandpass_slider.setRange(0.5, 230)
+        self.bandpass_slider.setValue((4, 90))
         self.bandpass_slider.setFixedWidth(100)
         self.bandpass_slider.setSingleStep(0.5)
         self.bandpass_slider.setDecimals(1)
@@ -435,7 +435,7 @@ class MainWindow(QMainWindow):
     def reset_controls_to_default(self):
         self.pan_slider.setEnabled(False)
 
-        self.bandpass_slider.setValue((20, 200))
+        self.bandpass_slider.setValue((3, 80))
         self.bandpass_apply.setChecked(False)
 
         self.lowpass_filter.setChecked(False)
