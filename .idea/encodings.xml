@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="Encoding">
-    <file url="file://$PROJECT_DIR$/zapis2_2025-01-10_18-12-12.csv" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/zapis_1A_2025-01-10_17-09-31.csv" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/zapis_1_2025-01-10_17-05-59.csv" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/zapis2_2025-01-10_18-12-12.csv" charset="windows-1250" />
+    <file url="file://$PROJECT_DIR$/zapis_1A_2025-01-10_17-09-31.csv" charset="windows-1250" />
+    <file url="file://$PROJECT_DIR$/zapis_1_2025-01-10_17-05-59.csv" charset="windows-1250" />
   </component>
 </project>

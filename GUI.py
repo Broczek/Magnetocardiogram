@@ -8,7 +8,7 @@ from data_processing import load_and_plot_file, update_plot
 from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change, \
     handle_bandpass_apply_toggle, validate_bandpass_values, handle_filter_toggle
 from qtrangeslider import QLabeledDoubleRangeSlider
-from live_visualization import RealTimePlotWindow, CustomTIOSession
+from live_visualization import RealTimePlotWindow
 from backend import IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
 
 

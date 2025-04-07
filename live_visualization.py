@@ -626,4 +626,3 @@ def reset_com_port():
         print("COM port reset via devcon completed.")
     except subprocess.CalledProcessError as e:
         print(f"Device reset error: {e}")
-
