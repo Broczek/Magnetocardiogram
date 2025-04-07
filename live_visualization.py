@@ -408,7 +408,7 @@ class RealTimePlotCanvas(FigureCanvas):
         self.parent_window = None
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.destroyed.connect(self.on_destroyed)
-        self.xlim = 300
+        self.xlim = 200
         self.n = np.linspace(0, self.xlim - 1, self.xlim)
         self.y = np.zeros(self.xlim)
 
@@ -432,8 +432,8 @@ class RealTimePlotCanvas(FigureCanvas):
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
         self.sample_rate = 480
-        self.buffer = deque(maxlen=2000)  # pełny bufor
-        self.delay = 50  # opóźnienie prezentacji
+        self.buffer = deque(maxlen=2000)
+        self.delay = 50
         self.threadpool = QThreadPool()
         self.filter_queue = queue.Queue()
         self.filter_thread = threading.Thread(target=self.filter_loop, daemon=True)
@@ -450,9 +450,8 @@ class RealTimePlotCanvas(FigureCanvas):
     def update_plot(self):
         try:
             if len(self.buffer) < self.delay + 10:
-                return  # za mało danych do sensownego filtrowania
+                return
 
-            # Skopiuj dane z bufora
             raw_data = list(self.buffer)
             y_filtered = np.array(raw_data)
 
@@ -472,7 +471,6 @@ class RealTimePlotCanvas(FigureCanvas):
                 except:
                     pass
 
-            # Dodaj opóźnienie, by ominąć brzegowe wzbudzenia
             display_value = y_filtered[-self.delay]
 
             self.y = np.roll(self.y, -1)
