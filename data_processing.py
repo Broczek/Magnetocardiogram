@@ -14,7 +14,21 @@ def load_data(file_path):
             lines = file.readlines()
 
         header_line = lines[0].strip()
-        if "Czas" in header_line and "Wartość" in header_line:
+
+        if "Timestamp" in header_line and "MKG Value" in header_line:
+            data = pd.read_csv(file_path, header=0, sep=",", decimal='.', encoding=encoding)
+            data.columns = [col.strip() for col in data.columns]
+
+            if 'Timestamp' not in data.columns or 'MKG Value' not in data.columns:
+                raise ValueError("File must contain 'Timestamp' and 'MKG Value' columns.")
+
+            data['Timestamp'] = pd.to_datetime(data['Timestamp'], format="%H:%M:%S.%f")
+            data['time'] = (data['Timestamp'] - data['Timestamp'].iloc[0]).dt.total_seconds()
+
+            data = data.rename(columns={'MKG Value': 'gradient.B'})
+            data = data[['time', 'gradient.B']]
+
+        elif "Czas" in header_line and "Wartość" in header_line:
             data = pd.read_csv(file_path, header=0, sep=",", decimal='.', encoding=encoding)
 
             data.columns = [col.strip().capitalize() for col in data.columns]

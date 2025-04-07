@@ -376,7 +376,7 @@ class RealTimePlotWindow(QMainWindow):
             )
             if file_path:
                 with open(file_path, "w") as file:
-                    file.write("Czas, Wartość\n")
+                    file.write("Time, Value\n")
                     for timestamp, value in self.recorded_data:
                         file.write(f"{timestamp},{value}\n")
                 print(f"The data was recorded in a file: {file_path}")
@@ -459,7 +459,7 @@ class RealTimePlotCanvas(FigureCanvas):
             if self.parent_window.lowpass_enabled:
                 y_filtered = lowpass_filter_live(y_filtered, normal_cutoff=0.2917)
             if self.parent_window.highpass_enabled:
-                y_filtered = highpass_filter_live(y_filtered, normal_cutoff=0.0125)
+                y_filtered = highpass_filter_live(y_filtered, normal_cutoff=0.04)
             if self.parent_window.notch_enabled:
                 y_filtered = notch_filter(y_filtered, freq=50, fs=self.sample_rate)
             if self.parent_window.custom_enabled:
