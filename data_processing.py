@@ -84,21 +84,21 @@ def load_data(file_path):
         return None
 
 
-def adjust_duplicate_timestamps(data, time_column='time', time_step=0.001):
-    data = data.sort_values(by=[time_column]).reset_index(drop=True)
-    seen_timestamps = set()
+def aggregate_duplicate_timestamps(data, time_column='time', value_column='gradient.B', method='mean'):
 
-    for idx in range(len(data)):
-        original_time = data.loc[idx, time_column]
-        while original_time in seen_timestamps:
-            original_time += time_step
-        seen_timestamps.add(original_time)
-        data.loc[idx, time_column] = original_time
+    if method == 'mean':
+        agg_func = 'mean'
+    elif method == 'median':
+        agg_func = 'median'
+    elif method == 'max':
+        agg_func = 'max'
+    elif method == 'min':
+        agg_func = 'min'
+    else:
+        raise ValueError("Unknown aggregation method")
 
-    print("Adjusted timestamps (first 10 rows):")
-    print(data[[time_column]].head(10))
-
-    return data
+    data_agg = data.groupby(time_column, as_index=False).agg({value_column: agg_func})
+    return data_agg
 
 
 def load_and_plot_file(window):
@@ -113,9 +113,9 @@ def load_and_plot_file(window):
             window.pan_slider.setValue(50)
 
             data = load_data(file_path)
-            window.reset_controls_to_default()
             if data is not None:
-                data = adjust_duplicate_timestamps(data, time_column='time', time_step=0.001)
+                window.reset_controls_to_default()
+                data = aggregate_duplicate_timestamps(data, time_column='time', value_column='gradient.B', method='mean')
 
                 window.original_data = data.copy()
                 window.data = data
