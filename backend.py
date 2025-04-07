@@ -169,11 +169,11 @@ def highpass_filter(data, normal_cutoff=0.01, order=5):
     return y
 
 
-def notch_filter(data, freq=50, fs=480, bandwidth=2, order=10):
+def notch_filter(data, freq=50, fs=480, bandwidth=5):
     nyq = 0.5 * fs
     low = (freq - bandwidth / 2) / nyq
     high = (freq + bandwidth / 2) / nyq
-    b, a = butter(N=order, Wn=[low, high], btype='bandstop')
+    b, a = butter(N=2, Wn=[low, high], btype='bandstop')
     y = filtfilt(b, a, data)
     return y
 

@@ -28,20 +28,20 @@ def load_data(file_path):
             data = data.rename(columns={'MKG Value': 'gradient.B'})
             data = data[['time', 'gradient.B']]
 
-        elif "Czas" in header_line and "Wartość" in header_line:
+        elif "Time" in header_line and "Value" in header_line:
             data = pd.read_csv(file_path, header=0, sep=",", decimal='.', encoding=encoding)
 
             data.columns = [col.strip().capitalize() for col in data.columns]
 
-            expected_columns = ['Czas', 'Wartość']
+            expected_columns = ['Time', 'Value']
             if list(data.columns) != expected_columns:
                 raise ValueError(
                     f"Incorrect file format. Headers expected:  {expected_columns}, found: {list(data.columns)}.")
 
-            data['Czas'] = pd.to_datetime(data['Czas'], format="%H:%M:%S.%f")
-            data['time'] = (data['Czas'] - data['Czas'].iloc[0]).dt.total_seconds()
+            data['Time'] = pd.to_datetime(data['Time'], format="%H:%M:%S.%f")
+            data['time'] = (data['Time'] - data['Time'].iloc[0]).dt.total_seconds()
 
-            data = data.rename(columns={'Wartość': 'gradient.B'})
+            data = data.rename(columns={'Value': 'gradient.B'})
 
             data = data[['time', 'gradient.B']]
 
@@ -113,6 +113,7 @@ def load_and_plot_file(window):
             window.pan_slider.setValue(50)
 
             data = load_data(file_path)
+            window.reset_controls_to_default()
             if data is not None:
                 data = adjust_duplicate_timestamps(data, time_column='time', time_step=0.001)
 
@@ -129,6 +130,7 @@ def load_and_plot_file(window):
                 window.show_controls()
             else:
                 QMessageBox.warning(window, "Warning", "Failed to load data from the file. Please check the file format.")
+            window.pan_slider.setEnabled(False)
         except Exception as e:
             QMessageBox.critical(window, "Error", f"Error reading file: {e}")
             print(f"Error reading file: {e}")

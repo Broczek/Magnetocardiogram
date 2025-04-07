@@ -432,6 +432,41 @@ class MainWindow(QMainWindow):
     def show_controls(self):
         show_controls(self)
 
+    def reset_controls_to_default(self):
+        self.pan_slider.setEnabled(False)
+
+        self.bandpass_slider.setValue((20, 200))
+        self.bandpass_apply.setChecked(False)
+
+        self.lowpass_filter.setChecked(False)
+        self.highpass_filter.setChecked(False)
+        self.filter_50hz.setChecked(False)
+        self.filter_100hz.setChecked(False)
+        self.filter_150hz.setChecked(False)
+        self.custom_filter_1_input.clear()
+        self.custom_filter_1_apply.setChecked(False)
+        self.custom_filter_2_input.clear()
+        self.custom_filter_2_apply.setChecked(False)
+
+        self.time_from_input.clear()
+        self.time_from_input.setStyleSheet("border: 1px solid #ccc; border-radius: 10px;")
+        self.error_from_label.clear()
+        self.error_from_label.hide()
+
+        self.time_to_input.clear()
+        self.time_to_input.setStyleSheet("border: 1px solid #ccc; border-radius: 10px;")
+        self.error_to_label.clear()
+        self.error_to_label.hide()
+
+        self.file_name_input.clear()
+        self.save_txt.setChecked(False)
+        self.save_tsv.setChecked(False)
+        self.save_xlsx.setChecked(False)
+
+        self.current_time_from = None
+        self.current_time_to = None
+        self.data = None
+
     def change_theme(self, state):
         if state == 2:
             self.setStyleSheet("""
