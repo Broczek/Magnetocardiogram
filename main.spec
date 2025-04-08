@@ -10,14 +10,19 @@ block_cipher = None
 def verify_and_copy_devcon():
     try:
         completed = subprocess.run(["where", "devcon"], capture_output=True, text=True, check=True)
-        devcon_path = completed.stdout.strip().splitlines()[0]
-        target_path = os.path.join(os.getcwd(), "devcon.exe")
-        shutil.copy2(devcon_path, target_path)
-        print(f"devcon.exe found and copied from: {devcon_path}")
+        devcon_path = os.path.abspath(completed.stdout.strip().splitlines()[0])
+        target_path = os.path.abspath(os.path.join(os.getcwd(), "devcon.exe"))
+
+        if os.path.samefile(devcon_path, target_path):
+            print(f"devcon.exe already present in project folder: {target_path}")
+        else:
+            shutil.copy2(devcon_path, target_path)
+            print(f"devcon.exe copied from {devcon_path} to {target_path}")
     except subprocess.CalledProcessError:
-        print("‘devcon.exe’ not found on the system. Make sure it is installed and added to the PATH.")
+        print("'devcon.exe' not found on the system. Make sure it is installed and added to the PATH.")
         print("Devcon installation instructions: https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/devcon")
         input("Press Enter to continue...")
+
 
 
 verify_and_copy_devcon()
