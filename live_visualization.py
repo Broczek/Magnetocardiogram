@@ -168,9 +168,9 @@ class RealTimePlotWindow(QMainWindow):
 
         self.custom_filter_layout = QHBoxLayout()
         self.custom_filter_input = QLineEdit()
-        self.custom_filter_input.setPlaceholderText("1-999Hz")
+        self.custom_filter_input.setPlaceholderText("1-230Hz")
         self.custom_filter_input.setFixedWidth(100)
-        self.custom_filter_validator = QIntValidator(1, 999, self)
+        self.custom_filter_validator = QIntValidator(1, 230, self)
         self.custom_filter_input.setValidator(self.custom_filter_validator)
         self.custom_filter_input.textChanged.connect(
             lambda: validate_custom_filter(self.custom_filter_input, self.custom_filter_apply))
@@ -466,7 +466,7 @@ class RealTimePlotCanvas(FigureCanvas):
                     text = self.parent_window.custom_filter_input.text()
                     if text.strip().isdigit():
                         custom_freq = int(text)
-                        if 1 <= custom_freq <= 999:
+                        if 1 <= custom_freq <= 230:
                             y_filtered = notch_filter(y_filtered, custom_freq, fs=self.sample_rate)
                 except:
                     pass

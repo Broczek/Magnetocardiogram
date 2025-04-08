@@ -71,7 +71,7 @@ def show_controls(window):
 
 def validate_custom_filter(input_field, apply_checkbox):
     text = input_field.text()
-    if text.isdigit() and 1 <= int(text) <= 999:
+    if text.isdigit() and 1 <= int(text) <= 230:
         apply_checkbox.setEnabled(True)
     else:
         apply_checkbox.setEnabled(False)
@@ -258,7 +258,7 @@ def apply_filters(window, data):
 
     try:
         custom_freq_1 = int(window.custom_filter_1_input.text())
-        if window.custom_filter_1_apply.isChecked() and 1 <= custom_freq_1 <= 999:
+        if window.custom_filter_1_apply.isChecked() and 1 <= custom_freq_1 <= 230:
             print(f"Applying Custom Filter 1 with freq {custom_freq_1}Hz...")
             data['gradient.B'] = notch_filter(data['gradient.B'], freq=custom_freq_1)
     except ValueError:
@@ -266,7 +266,7 @@ def apply_filters(window, data):
 
     try:
         custom_freq_2 = int(window.custom_filter_2_input.text())
-        if window.custom_filter_2_apply.isChecked() and 1 <= custom_freq_2 <= 999:
+        if window.custom_filter_2_apply.isChecked() and 1 <= custom_freq_2 <= 230:
             print(f"Applying Custom Filter 2 with freq {custom_freq_2}Hz...")
             data['gradient.B'] = notch_filter(data['gradient.B'], freq=custom_freq_2)
     except ValueError:
