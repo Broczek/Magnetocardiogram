@@ -1,6 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
+import subprocess
+import shutil
+from PyInstaller.utils.hooks import collect_submodules
+
 block_cipher = None
+
+def verify_and_copy_devcon():
+    try:
+        completed = subprocess.run(["where", "devcon"], capture_output=True, text=True, check=True)
+        devcon_path = completed.stdout.strip().splitlines()[0]
+        target_path = os.path.join(os.getcwd(), "devcon.exe")
+        shutil.copy2(devcon_path, target_path)
+        print(f"devcon.exe found and copied from: {devcon_path}")
+    except subprocess.CalledProcessError:
+        print("‘devcon.exe’ not found on the system. Make sure it is installed and added to the PATH.")
+        print("Devcon installation instructions: https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/devcon")
+        input("Press Enter to continue...")
+
+
+verify_and_copy_devcon()
 
 a = Analysis(
     ['main.py'],
@@ -14,7 +34,8 @@ a = Analysis(
     excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
-    noarchive=False,
+    cipher=block_cipher,
+    noarchive=False
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
