@@ -145,25 +145,13 @@ def bandpass_filter(data, lowcut, highcut, fs=480, order=5):
     return y
 
 
-def lowpass_filter_live(data, normal_cutoff=0.08, order=5):
+def lowpass_filter(data, normal_cutoff=0.5, order=5):
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
     y = filtfilt(b, a, data)
     return y
 
 
-def highpass_filter_live(data, normal_cutoff=0.003, order=5):
-    b, a = butter(order, normal_cutoff, btype='high', analog=False)
-    y = filtfilt(b, a, data)
-    return y
-
-
-def lowpass_filter(data, normal_cutoff=0.45, order=5):
-    b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    y = filtfilt(b, a, data)
-    return y
-
-
-def highpass_filter(data, normal_cutoff=0.01, order=5):
+def highpass_filter(data, normal_cutoff=0.04, order=5):
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
     y = filtfilt(b, a, data)
     return y

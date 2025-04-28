@@ -15,7 +15,7 @@ import queue
 import tio
 import slip
 import serial
-from backend import lowpass_filter_live, highpass_filter_live, notch_filter, validate_custom_filter, state_change, detect_sensor_port, IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
+from backend import lowpass_filter, highpass_filter, notch_filter, validate_custom_filter, state_change, detect_sensor_port, IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
 from collections import deque
 
 if getattr(sys, 'frozen', False):
@@ -24,15 +24,6 @@ else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DEVCON_PATH = os.path.join(BASE_DIR, "devcon.exe").replace("\\", "/")
-
-
-class FilterWorkerSignals(QObject):
-    result = pyqtSignal(object)
-    error = pyqtSignal(object)
-
-
-class TLRPCException(Exception):
-    pass
 
 
 class CustomTIOSession(tio.TIOSession):
@@ -58,32 +49,6 @@ class CustomTIOSession(tio.TIOSession):
                         except slip.SLIPEncodingError as error:
                             self.logger.debug(error)
                             return b""
-
-    def process_recv_buffer(self):
-        while slip.SLIP_END_CHAR in self.recv_buffer:
-            packet, self.recv_buffer = self.recv_buffer.split(slip.SLIP_END_CHAR, 1)
-            try:
-                decoded_packet = self.protocol.decode_packet(slip.decode(packet))
-                if decoded_packet['type'] == tio.TL_PTYPE_STREAM0:
-                    try:
-                        self.pub_queue.put(decoded_packet, block=False)
-                    except queue.Full:
-                        self.pub_queue.get()
-                        self.pub_queue.put(decoded_packet, block=False)
-                elif decoded_packet['type'] in [tio.TL_PTYPE_RPC_REP, tio.TL_PTYPE_RPC_ERROR]:
-                    try:
-                        self.rep_queue.put(decoded_packet, block=False)
-                    except queue.Full:
-                        self.rep_queue.get()
-                        self.rep_queue.put(decoded_packet, block=False)
-                        self.logger.error("Tossing an unclaimed REP!")
-                elif decoded_packet['type'] == tio.TL_PTYPE_OTHER_ROUTING:
-                    if self.recv_router is not None:
-                        self.recv_router(decoded_packet['routing'], decoded_packet['raw'])
-            except slip.SLIPEncodingError as error:
-                self.logger.debug(f"SLIP decoding error: {error}")
-            except Exception as e:
-                self.logger.error(f"Error decoding packet: {e}")
 
 
 class RealTimePlotWindow(QMainWindow):
@@ -407,7 +372,6 @@ class RealTimePlotCanvas(FigureCanvas):
 
         self.parent_window = None
         self.setAttribute(Qt.WA_DeleteOnClose, True)
-        self.destroyed.connect(self.on_destroyed)
         self.xlim = 200
         self.n = np.linspace(0, self.xlim - 1, self.xlim)
         self.y = np.zeros(self.xlim)
@@ -435,13 +399,7 @@ class RealTimePlotCanvas(FigureCanvas):
         self.buffer = deque(maxlen=2000)
         self.delay = 50
         self.threadpool = QThreadPool()
-        self.filter_queue = queue.Queue()
-        self.filter_thread = threading.Thread(target=self.filter_loop, daemon=True)
-        self.filter_thread.start()
         print("RealTimePlotCanvas.__init__ called")
-
-    def on_destroyed(self):
-        print("RealTimePlotWindow destroyed")
 
     def add_data(self, value):
         print(f"add_data called with the value: {value}")
@@ -456,9 +414,9 @@ class RealTimePlotCanvas(FigureCanvas):
             y_filtered = np.array(raw_data)
 
             if self.parent_window.lowpass_enabled:
-                y_filtered = lowpass_filter_live(y_filtered, normal_cutoff=0.2917)
+                y_filtered = lowpass_filter(y_filtered, normal_cutoff=0.2917)
             if self.parent_window.highpass_enabled:
-                y_filtered = highpass_filter_live(y_filtered, normal_cutoff=0.04)
+                y_filtered = highpass_filter(y_filtered, normal_cutoff=0.04)
             if self.parent_window.notch_enabled:
                 y_filtered = notch_filter(y_filtered, freq=50, fs=self.sample_rate)
             if self.parent_window.custom_enabled:
@@ -519,19 +477,6 @@ class RealTimePlotCanvas(FigureCanvas):
                     self.session.serial.close()
             except Exception as e:
                 print(f"Serial close error: {e}")
-
-    def filter_loop(self):
-        while True:
-            filter_task = self.filter_queue.get()
-            if filter_task is None:
-                continue
-
-            filter_func, data, callback, args, kwargs = filter_task
-            try:
-                filtered_data = filter_func(data, *args, **kwargs)
-                callback(filtered_data)
-            except Exception as e:
-                print(f"Filtering error: {e}")
 
     def data_loop(self):
         print("data_loop called")
