@@ -1,0 +1,1 @@
+An application for visualising and analysing magnetocardiographic signals, developed based on an innovative device from Twinleaf. The solution represents a significant step forward in portable MCG testing as part of the work presented at the 31st Conference of the Association of Non-Invasive Electrocardiology and Telemetry of the Polish Cardiac Society in Zakopane.
