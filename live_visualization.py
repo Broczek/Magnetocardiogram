@@ -15,7 +15,8 @@ import queue
 import tio
 import slip
 import serial
-from backend import lowpass_filter, highpass_filter, notch_filter, validate_custom_filter, state_change, detect_sensor_port, IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
+from backend import validate_custom_filter, state_change, detect_sensor_port, IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
+from signal_processing import FilterSettings, apply_filter_pipeline, DEFAULT_FS
 from collections import deque
 
 if getattr(sys, 'frozen', False):
@@ -131,6 +132,17 @@ class RealTimePlotWindow(QMainWindow):
         self.filters_layout.addWidget(self.notch_filter)
         self.filters_layout.addStretch()
 
+        self.baseline_filter = QCheckBox("Baseline")
+        self.baseline_filter.setChecked(True)
+        self.baseline_filter.clicked.connect(self.toggle_baseline)
+        self.filters_layout.addWidget(self.baseline_filter)
+        self.filters_layout.addStretch()
+
+        self.savgol_filter = QCheckBox("Smooth")
+        self.savgol_filter.clicked.connect(self.toggle_savgol)
+        self.filters_layout.addWidget(self.savgol_filter)
+        self.filters_layout.addStretch()
+
         self.custom_filter_layout = QHBoxLayout()
         self.custom_filter_input = QLineEdit()
         self.custom_filter_input.setPlaceholderText("1-230Hz")
@@ -170,12 +182,23 @@ class RealTimePlotWindow(QMainWindow):
         self.lowpass_filter.setStyleSheet(switch_style)
         self.highpass_filter.setStyleSheet(switch_style)
         self.notch_filter.setStyleSheet(switch_style)
+        self.baseline_filter.setStyleSheet(switch_style)
+        self.savgol_filter.setStyleSheet(switch_style)
         self.custom_filter_apply.setStyleSheet(switch_style)
 
         self.lowpass_enabled = False
         self.highpass_enabled = False
         self.notch_enabled = False
         self.custom_enabled = False
+        self.lowpass_cutoff = 120.0
+        self.highpass_cutoff = 0.5
+        self.custom_notch_freq = None
+        self.baseline_enabled = True
+        self.savgol_enabled = False
+        self.baseline_window_sec = 0.6
+        self.baseline_polyorder = 3
+        self.savgol_window_sec = 0.02
+        self.savgol_polyorder = 3
 
         self.canvas_frame = QFrame(self.central_widget)
         self.canvas_frame.setContentsMargins(0, 0, 0, 0)
@@ -241,7 +264,20 @@ class RealTimePlotWindow(QMainWindow):
 
     def toggle_custom(self):
         self.custom_enabled = self.custom_filter_apply.isChecked()
-        print(f"Custom filter: {self.custom_enabled}")
+        self.custom_notch_freq = None
+        if self.custom_enabled:
+            text = self.custom_filter_input.text().strip()
+            if text.isdigit():
+                self.custom_notch_freq = float(text)
+        print(f"Custom filter: {self.custom_enabled} ({self.custom_notch_freq})")
+
+    def toggle_baseline(self):
+        self.baseline_enabled = self.baseline_filter.isChecked()
+        print(f"Baseline removal: {self.baseline_enabled}")
+
+    def toggle_savgol(self):
+        self.savgol_enabled = self.savgol_filter.isChecked()
+        print(f"Savgol smoothing: {self.savgol_enabled}")
 
     def change_theme(self, state):
         if state == 2:
@@ -395,7 +431,7 @@ class RealTimePlotCanvas(FigureCanvas):
         self.running = False
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
-        self.sample_rate = 480
+        self.sample_rate = DEFAULT_FS
         self.buffer = deque(maxlen=2000)
         self.delay = 50
         self.threadpool = QThreadPool()
@@ -410,24 +446,32 @@ class RealTimePlotCanvas(FigureCanvas):
             if len(self.buffer) < self.delay + 10:
                 return
 
-            raw_data = list(self.buffer)
-            y_filtered = np.array(raw_data)
+            raw_data = np.array(self.buffer, dtype=float)
+            if raw_data.size < self.delay + 1:
+                return
 
-            if self.parent_window.lowpass_enabled:
-                y_filtered = lowpass_filter(y_filtered, normal_cutoff=0.2917)
-            if self.parent_window.highpass_enabled:
-                y_filtered = highpass_filter(y_filtered, normal_cutoff=0.04)
-            if self.parent_window.notch_enabled:
-                y_filtered = notch_filter(y_filtered, freq=50, fs=self.sample_rate)
-            if self.parent_window.custom_enabled:
-                try:
-                    text = self.parent_window.custom_filter_input.text()
-                    if text.strip().isdigit():
-                        custom_freq = int(text)
-                        if 1 <= custom_freq <= 230:
-                            y_filtered = notch_filter(y_filtered, custom_freq, fs=self.sample_rate)
-                except:
-                    pass
+            custom_notches = ()
+            if self.parent_window.custom_enabled and self.parent_window.custom_notch_freq:
+                custom_notches = (self.parent_window.custom_notch_freq,)
+
+            settings = FilterSettings(
+                fs=self.sample_rate,
+                use_highpass=self.parent_window.highpass_enabled,
+                highpass_cutoff=self.parent_window.highpass_cutoff,
+                use_lowpass=self.parent_window.lowpass_enabled,
+                lowpass_cutoff=self.parent_window.lowpass_cutoff,
+                notch_freqs=(50.0,) if self.parent_window.notch_enabled else (),
+                custom_notch_freqs=custom_notches,
+                use_baseline=self.parent_window.baseline_enabled,
+                baseline_window_sec=self.parent_window.baseline_window_sec,
+                baseline_polyorder=self.parent_window.baseline_polyorder,
+                use_savgol_smooth=self.parent_window.savgol_enabled,
+                savgol_window_sec=self.parent_window.savgol_window_sec,
+                auto_notch=True,
+                savgol_polyorder=self.parent_window.savgol_polyorder,
+            )
+
+            y_filtered, _ = apply_filter_pipeline(raw_data, settings)
 
             display_value = y_filtered[-self.delay]
 

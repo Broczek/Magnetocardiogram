@@ -1,12 +1,24 @@
+import json
 import os
 import sys
 import time
+from typing import Dict, List, Optional
+
+import numpy as np
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QVBoxLayout, QFrame, QFileDialog, QApplication
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from scipy.signal import butter, filtfilt
 import serial.tools.list_ports
+
+from signal_processing import (
+    DEFAULT_FS,
+    FilterSettings,
+    apply_filter_pipeline,
+    detect_r_peaks,
+    extract_rr_features,
+    refine_line_frequency,
+)
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
@@ -52,11 +64,37 @@ def show_controls(window):
     window.pan_label.show()
     window.pan_slider.show()
     window.filters_label.show()
+    if hasattr(window, 'channel_label'):
+        window.channel_label.show()
+    if hasattr(window, 'channel_selector'):
+        window.channel_selector.show()
+    if hasattr(window, 'processing_profile_label'):
+        window.processing_profile_label.show()
+    if hasattr(window, 'processing_profile_selector'):
+        window.processing_profile_selector.show()
+    if hasattr(window, 'reference_label'):
+        window.reference_label.show()
+    if hasattr(window, 'reference_selector'):
+        window.reference_selector.show()
     window.lowpass_filter.show()
     window.highpass_filter.show()
     window.filter_50hz.show()
     window.filter_100hz.show()
     window.filter_150hz.show()
+    if hasattr(window, 'reference_cancel_checkbox'):
+        window.reference_cancel_checkbox.show()
+    if hasattr(window, 'auto_notch_checkbox'):
+        window.auto_notch_checkbox.show()
+    if hasattr(window, 'baseline_remove_checkbox'):
+        window.baseline_remove_checkbox.show()
+    if hasattr(window, 'savgol_smooth_checkbox'):
+        window.savgol_smooth_checkbox.show()
+    if hasattr(window, 'despike_filter'):
+        window.despike_filter.show()
+    if hasattr(window, 'feature_toggle'):
+        window.feature_toggle.show()
+    if hasattr(window, 'ecg_overlay_checkbox'):
+        window.ecg_overlay_checkbox.setVisible(getattr(window, 'ecg_overlay_data', None) is not None)
     window.custom_filter_1_input.show()
     window.custom_filter_1_apply.show()
     window.custom_filter_2_input.show()
@@ -136,147 +174,339 @@ def apply_time_range(window):
             pass
 
 
-def bandpass_filter(data, lowcut, highcut, fs=480, order=5):
-    nyq = 0.5 * fs
-    low = lowcut / nyq
-    high = highcut / nyq
-    b, a = butter(order, [low, high], btype='band')
-    y = filtfilt(b, a, data)
-    return y
+def get_sampling_rate(window) -> float:
+    for attr_name in ('sampling_rate',):
+        sr = getattr(window, attr_name, None)
+        if sr and sr > 0:
+            return sr
+
+    for dataset in (getattr(window, 'data', None), getattr(window, 'original_data', None)):
+        if dataset is not None:
+            sr = dataset.attrs.get('sampling_rate')
+            if sr and sr > 0:
+                return sr
+
+    return DEFAULT_FS
 
 
-def lowpass_filter(data, normal_cutoff=0.5, order=5):
-    b, a = butter(order, normal_cutoff, btype='low', analog=False)
-    y = filtfilt(b, a, data)
-    return y
+def get_primary_channel(window, data) -> Optional[str]:
+    preferred = getattr(window, 'primary_channel', None)
+    if preferred and preferred in data.columns:
+        return preferred
+    if 'gradient.B' in data.columns:
+        return 'gradient.B'
+    numeric_columns = [col for col in data.columns if col != 'time']
+    return numeric_columns[0] if numeric_columns else None
 
 
-def highpass_filter(data, normal_cutoff=0.04, order=5):
-    b, a = butter(order, normal_cutoff, btype='high', analog=False)
-    y = filtfilt(b, a, data)
-    return y
+def get_reference_series(window, data):
+    checkbox = getattr(window, 'reference_cancel_checkbox', None)
+    if checkbox is None or not checkbox.isChecked():
+        return None
+    reference_column = getattr(window, 'reference_channel', None)
+    if reference_column and reference_column in data.columns:
+        return data[reference_column].to_numpy(dtype=float)
+    return None
 
 
-def notch_filter(data, freq=50, fs=480, bandwidth=5):
-    nyq = 0.5 * fs
-    low = (freq - bandwidth / 2) / nyq
-    high = (freq + bandwidth / 2) / nyq
-    b, a = butter(N=2, Wn=[low, high], btype='bandstop')
-    y = filtfilt(b, a, data)
-    return y
+def collect_notch_frequencies(window, fs: float) -> (List[float], List[float]):
+    builtin = []
+    for freq, checkbox in ((50.0, window.filter_50hz),
+                           (100.0, window.filter_100hz),
+                           (150.0, window.filter_150hz)):
+        if checkbox.isChecked():
+            builtin.append(freq)
+
+    ceiling = max(1.0, 0.45 * fs)
+    custom: List[float] = []
+    custom_inputs = (
+        (getattr(window, 'custom_filter_1_input', None), getattr(window, 'custom_filter_1_apply', None)),
+        (getattr(window, 'custom_filter_2_input', None), getattr(window, 'custom_filter_2_apply', None)),
+    )
+    for input_field, checkbox in custom_inputs:
+        if input_field is None or checkbox is None or not checkbox.isChecked():
+            continue
+        try:
+            freq = float(input_field.text())
+        except (TypeError, ValueError):
+            continue
+        if 1.0 <= freq <= ceiling:
+            custom.append(freq)
+    return builtin, custom
 
 
-def update_bandpass_filter(window):
-    if not hasattr(window, 'original_data') or window.original_data is None:
-        print("No original data available. Filtering is not possible.")
-        return
-    window.filtered_data_no_bandpass = apply_filters(window, window.original_data.copy())
-    if window.bandpass_apply.isChecked():
-        lowcut, highcut = window.bandpass_slider.value()
-        print(f"Applying bandpass filter: {lowcut}Hz - {highcut}Hz")
-        window.filtered_data_with_bandpass = window.filtered_data_no_bandpass.copy()
-        window.filtered_data_with_bandpass['gradient.B'] = bandpass_filter(window.filtered_data_with_bandpass['gradient.B'], lowcut, highcut)
-        window.data['gradient.B'] = window.filtered_data_with_bandpass['gradient.B']
+def apply_filters(window, data):
+    if data is None or data.empty:
+        return data
+
+    fs = get_sampling_rate(window)
+    primary_column = get_primary_channel(window, data)
+    if primary_column is None:
+        return data
+
+    signal = data[primary_column].to_numpy(dtype=float)
+    reference_signal = get_reference_series(window, data)
+    builtin_notches, custom_notches = collect_notch_frequencies(window, fs)
+    refined_builtin = []
+    for freq in builtin_notches:
+        refined = refine_line_frequency(signal, fs, freq, window_hz=1.2)
+        if refined not in refined_builtin:
+            refined_builtin.append(refined)
+    builtin_notches = refined_builtin
+
+    refined_custom = []
+    for freq in custom_notches:
+        refined = refine_line_frequency(signal, fs, freq, window_hz=1.2)
+        if refined not in refined_custom:
+            refined_custom.append(refined)
+    custom_notches = refined_custom
+    baseline_checkbox = getattr(window, 'baseline_remove_checkbox', None)
+    savgol_checkbox = getattr(window, 'savgol_smooth_checkbox', None)
+    baseline_enabled = baseline_checkbox.isChecked() if baseline_checkbox else False
+    savgol_enabled = savgol_checkbox.isChecked() if savgol_checkbox else False
+    auto_notch_checkbox = getattr(window, 'auto_notch_checkbox', None)
+    auto_notch_enabled = auto_notch_checkbox.isChecked() if auto_notch_checkbox else True
+
+    custom_notches = refined_custom
+
+    low_default = getattr(window, 'highpass_cutoff', 0.5)
+    high_default = getattr(window, 'lowpass_cutoff', min(150.0, 0.45 * fs))
+
+    bandpass_low, bandpass_high = getattr(window.bandpass_slider, 'value', lambda: (low_default, high_default))()
+    bandpass_low = max(0.1, float(bandpass_low))
+    bandpass_high = min(float(bandpass_high), fs * 0.49)
+    if bandpass_high <= bandpass_low:
+        bandpass_high = min(fs * 0.49, bandpass_low + 5.0)
+
+    settings = FilterSettings(
+        fs=fs,
+        use_highpass=window.highpass_filter.isChecked(),
+        highpass_cutoff=low_default,
+        use_lowpass=window.lowpass_filter.isChecked(),
+        lowpass_cutoff=high_default,
+        use_bandpass=window.bandpass_apply.isChecked(),
+        bandpass_range=(bandpass_low, bandpass_high),
+        notch_freqs=tuple(builtin_notches),
+        custom_notch_freqs=tuple(custom_notches),
+        reference_signal=reference_signal,
+        use_reference_cancel=reference_signal is not None,
+        use_baseline=baseline_enabled,
+        baseline_window_sec=getattr(window, 'baseline_window_sec', 0.7),
+        baseline_polyorder=getattr(window, 'baseline_polyorder', 3),
+        use_savgol_smooth=savgol_enabled,
+        savgol_window_sec=getattr(window, 'savgol_window_sec', 0.025),
+        savgol_polyorder=getattr(window, 'savgol_polyorder', 3),
+        auto_notch=auto_notch_enabled,
+        apply_hampel=getattr(window, 'despike_filter', None) is not None and window.despike_filter.isChecked(),
+        hampel_window=getattr(window, 'hampel_window', 11),
+        hampel_sigmas=getattr(window, 'hampel_sigmas', 3.0),
+    )
+
+    filtered_signal, debug_info = apply_filter_pipeline(signal, settings)
+    filtered = data.copy()
+    filtered['gradient.B'] = filtered_signal
+    filtered.attrs['filter_debug'] = debug_info
+
+    peaks_array = np.array([], dtype=int)
+    feature_summary: Dict[str, float] = {}
+    feature_toggle = getattr(window, 'feature_toggle', None)
+    if feature_toggle is not None and feature_toggle.isChecked():
+        std_estimate = float(np.std(filtered_signal)) if filtered_signal.size else 0.0
+        prominence = getattr(window, 'peak_prominence', None)
+        if prominence is None:
+            prominence = max(0.05, 0.35 * std_estimate)
+        peaks_array, peak_props = detect_r_peaks(filtered_signal, fs, prominence=prominence)
+        feature_summary = extract_rr_features(filtered['time'].to_numpy(), peaks_array, fs)
+        filtered.attrs['peak_props'] = peak_props
+
+    filtered.attrs['peaks'] = peaks_array
+    filtered.attrs['features'] = feature_summary
+
+    window.last_filter_debug = debug_info
+    window.last_sampling_rate = fs
+    window.last_primary_channel = primary_column
+    window.last_detected_peaks = peaks_array
+    window.last_feature_summary = feature_summary
+
+    return filtered
+
+
+
+
+def compute_ecg_overlay_series(window, filtered_data):
+    window.last_overlay_debug = {}
+    checkbox = getattr(window, 'ecg_overlay_checkbox', None)
+    if checkbox is None or not checkbox.isChecked():
+        return None
+
+    overlay_df = getattr(window, 'ecg_overlay_data', None)
+    overlay_column = getattr(window, 'ecg_overlay_column', None)
+    if overlay_df is None or overlay_df.empty or not overlay_column or overlay_column not in overlay_df.columns:
+        return None
+
+    times = overlay_df['time'].to_numpy(dtype=float)
+    values = overlay_df[overlay_column].to_numpy(dtype=float)
+    if times.size < 2 or values.size == 0:
+        return None
+
+    overlay_fs = getattr(window, 'ecg_overlay_sampling_rate', None) or get_sampling_rate(window)
+    builtin_notches, custom_notches = collect_notch_frequencies(window, overlay_fs)
+
+    refined_builtin = []
+    for freq in builtin_notches:
+        refined = refine_line_frequency(values, overlay_fs, freq, window_hz=1.2)
+        if refined not in refined_builtin:
+            refined_builtin.append(refined)
+    builtin_notches = refined_builtin
+
+    refined_custom = []
+    for freq in custom_notches:
+        refined = refine_line_frequency(values, overlay_fs, freq, window_hz=1.2)
+        if refined not in refined_custom:
+            refined_custom.append(refined)
+    custom_notches = refined_custom
+
+    auto_notch_checkbox = getattr(window, 'auto_notch_checkbox', None)
+    auto_notch_enabled = auto_notch_checkbox.isChecked() if auto_notch_checkbox else True
+
+    settings = FilterSettings(
+        fs=overlay_fs,
+        use_bandpass=True,
+        bandpass_range=(5.0, min(45.0, 0.45 * overlay_fs)),
+        use_baseline=True,
+        baseline_window_sec=getattr(window, 'ecg_overlay_baseline_sec', 0.6),
+        baseline_polyorder=getattr(window, 'ecg_overlay_baseline_poly', 3),
+        use_savgol_smooth=True,
+        savgol_window_sec=getattr(window, 'ecg_overlay_savgol_sec', 0.018),
+        savgol_polyorder=getattr(window, 'ecg_overlay_savgol_poly', 3),
+        notch_freqs=tuple(builtin_notches),
+        custom_notch_freqs=tuple(custom_notches),
+        auto_notch=auto_notch_enabled,
+    )
+
+    filtered_overlay, overlay_debug = apply_filter_pipeline(values, settings)
+    window.last_overlay_debug = overlay_debug
+
+    target_times = filtered_data['time'].to_numpy(dtype=float)
+    if target_times.size == 0:
+        return None
+
+    overlay_interp = np.interp(target_times, times, filtered_overlay, left=np.nan, right=np.nan)
+    mask = np.isfinite(overlay_interp)
+    if not np.any(mask):
+        return None
+
+    overlay_interp = np.nan_to_num(overlay_interp, nan=0.0)
+    overlay_interp -= np.median(overlay_interp)
+    max_abs = np.max(np.abs(overlay_interp))
+    if max_abs > 0:
+        overlay_interp /= max_abs
+
+    range_mkg = filtered_data['gradient.B'].max() - filtered_data['gradient.B'].min()
+    scale = range_mkg * 0.4 if range_mkg > 0 else 1.0
+    overlay_interp *= scale
+    offset = (filtered_data['gradient.B'].max() + filtered_data['gradient.B'].min()) / 2.0
+    overlay_interp += offset
+
+    return overlay_interp
+
+
+def refresh_plot(window):
+    zoom_value = None
+    pan_value = None
+    zoom_enabled = False
+    pan_enabled = False
+
+    if hasattr(window, 'zoom_slider'):
+        try:
+            zoom_value = window.zoom_slider.value()
+            zoom_enabled = window.zoom_slider.isEnabled()
+        except Exception:
+            zoom_value = None
+            zoom_enabled = False
+
+    if hasattr(window, 'pan_slider'):
+        try:
+            pan_value = window.pan_slider.value()
+            pan_enabled = window.pan_slider.isEnabled()
+        except Exception:
+            pan_value = None
+            pan_enabled = False
+
+    if window.current_time_from is not None and window.current_time_to is not None:
+        subset = window.data[(window.data['time'] >= window.current_time_from) &
+                             (window.data['time'] <= window.current_time_to)]
+        update_plot(window, subset, window.current_time_from, window.current_time_to)
     else:
-        window.data['gradient.B'] = window.filtered_data_no_bandpass['gradient.B']
+        update_plot(window, window.data)
 
-    update_plot(window, window.data)
+    if zoom_value is not None:
+        try:
+            previous_state = window.zoom_slider.blockSignals(True)
+            window.zoom_slider.setValue(zoom_value)
+        finally:
+            window.zoom_slider.blockSignals(previous_state)
+        if zoom_enabled:
+            update_zoom(window, zoom_value)
+
+    if pan_value is not None:
+        try:
+            previous_state = window.pan_slider.blockSignals(True)
+            window.pan_slider.setValue(pan_value)
+        finally:
+            window.pan_slider.blockSignals(previous_state)
+        if pan_enabled and window.pan_slider.isEnabled():
+            update_pan(window, pan_value)
 
 
 def handle_bandpass_apply_toggle(window):
-    if window.bandpass_apply.isChecked():
-        update_bandpass_filter(window)
-    else:
-        print("Bandpass filter off. Resetting to filtered state without bandpass.")
-        window.data['gradient.B'] = window.filtered_data_no_bandpass['gradient.B']
-        update_plot(window, window.data)
+    refresh_plot(window)
 
 
 def update_slider_labels(window):
     low_value, high_value = window.bandpass_slider.value()
     try:
         window.bandpass_slider._min_label.setValue(low_value)
-        if high_value <= 40:
-            window.bandpass_slider._max_label.setValue(40)
-            time.sleep(0.1)
-            QApplication.processEvents()
-        else:
-            window.bandpass_slider._max_label.setValue(high_value)
+        window.bandpass_slider._max_label.setValue(max(high_value, low_value + 5))
     except AttributeError as e:
+        print(f"Label update error: {e}")
 
-
-            print(f"Label update error: {e}")
     if window.bandpass_apply.isChecked():
-        update_bandpass_filter(window)
-    else:
-        print("Bandpass filter is off. Slider movement will not affect the plot.")
+        refresh_plot(window)
 
 
 def validate_bandpass_values(window):
     low_value, high_value = window.bandpass_slider.value()
+    fs = get_sampling_rate(window)
 
-    if high_value < 40:
-        high_value = 40
-        window.bandpass_slider.setValue((low_value, high_value))
+    min_gap = 5.0
+    adjusted_low = max(0.1, float(low_value))
+    adjusted_high = float(high_value)
+
+    changed = False
+    if adjusted_high <= adjusted_low + min_gap:
+        adjusted_high = adjusted_low + min_gap
+        changed = True
+
+    if fs and fs > 0:
+        max_high = fs * 0.49
+        if adjusted_high > max_high:
+            adjusted_high = max_high
+            changed = True
+
+    if changed:
+        previous_state = window.bandpass_slider.blockSignals(True)
+        try:
+            window.bandpass_slider.setValue((adjusted_low, adjusted_high))
+        finally:
+            window.bandpass_slider.blockSignals(previous_state)
 
     update_slider_labels(window)
     QApplication.processEvents()
 
 
-def apply_filters(window, data):
-    if window.lowpass_filter.isChecked():
-        print("Applying Lowpass Filter...")
-        data['gradient.B'] = lowpass_filter(data['gradient.B'])
-
-    if window.highpass_filter.isChecked():
-        print("Applying Highpass Filter...")
-        data['gradient.B'] = highpass_filter(data['gradient.B'])
-
-    if window.filter_50hz.isChecked():
-        print("Applying 50Hz Notch Filter...")
-        data['gradient.B'] = notch_filter(data['gradient.B'], freq=50)
-
-    if window.filter_100hz.isChecked():
-        print("Applying 100Hz Notch Filter...")
-        data['gradient.B'] = notch_filter(data['gradient.B'], freq=100)
-
-    if window.filter_150hz.isChecked():
-        print("Applying 150Hz Notch Filter...")
-        data['gradient.B'] = notch_filter(data['gradient.B'], freq=150)
-
-    try:
-        custom_freq_1 = int(window.custom_filter_1_input.text())
-        if window.custom_filter_1_apply.isChecked() and 1 <= custom_freq_1 <= 230:
-            print(f"Applying Custom Filter 1 with freq {custom_freq_1}Hz...")
-            data['gradient.B'] = notch_filter(data['gradient.B'], freq=custom_freq_1)
-    except ValueError:
-        print("Invalid input for Custom Filter 1.")
-
-    try:
-        custom_freq_2 = int(window.custom_filter_2_input.text())
-        if window.custom_filter_2_apply.isChecked() and 1 <= custom_freq_2 <= 230:
-            print(f"Applying Custom Filter 2 with freq {custom_freq_2}Hz...")
-            data['gradient.B'] = notch_filter(data['gradient.B'], freq=custom_freq_2)
-    except ValueError:
-        print("Invalid input for Custom Filter 2.")
-
-    return data
-
-
-def toggle_bandpass_apply_silently(window):
-    if not window.bandpass_apply.isChecked():
-        window.bandpass_apply.setChecked(True)
-        window.bandpass_apply.setChecked(False)
-
-
 def handle_filter_toggle(window, filter_name):
-    if not window.bandpass_apply.isChecked():
-        toggle_bandpass_apply_silently(window)
-
-        window.filtered_data_no_bandpass = apply_filters(window, window.original_data.copy())
-        window.data['gradient.B'] = window.filtered_data_no_bandpass['gradient.B']
-
-    update_plot(window, window.data)
+    refresh_plot(window)
 
 
 def save_data(window):
@@ -310,14 +540,22 @@ def save_data(window):
 
     filtered_data = apply_filters(window, window.original_data.copy())
 
-    if window.bandpass_apply.isChecked():
-        lowcut, highcut = window.bandpass_slider.value()
-        print(f"Applying bandpass filter: {lowcut}Hz - {highcut}Hz for saving data.")
-        filtered_data['gradient.B'] = bandpass_filter(filtered_data['gradient.B'], lowcut, highcut)
-
     if window.current_time_from is not None and window.current_time_to is not None:
         filtered_data = filtered_data[(filtered_data['time'] >= window.current_time_from) &
                                       (filtered_data['time'] <= window.current_time_to)]
+
+    feature_summary = filtered_data.attrs.get('features', {})
+    filter_debug = filtered_data.attrs.get('filter_debug', {})
+    if feature_summary:
+        features_path = os.path.join(save_folder, f"{file_name}_features.json")
+        export_payload = {
+            "features": feature_summary,
+            "sampling_rate": get_sampling_rate(window),
+            "filters": filter_debug,
+        }
+        with open(features_path, "w", encoding="utf-8") as feature_file:
+            json.dump(export_payload, feature_file, indent=2)
+        print(f"Saved feature summary to {features_path}")
 
     if "txt" in formats:
         txt_file_path = os.path.join(save_folder, f"{file_name}.txt")
@@ -418,10 +656,29 @@ def update_plot(window, data, time_from=None, time_to=None):
             line_color = 'blue'
 
         window.canvas.axes.plot(filtered_data['time'], filtered_data['gradient.B'], label='Gradient B', color=line_color)
+
+        overlay_series = compute_ecg_overlay_series(window, filtered_data)
+        if overlay_series is not None:
+            window.canvas.axes.plot(filtered_data['time'], overlay_series, label='ECG overlay', color='orange', linewidth=1.0, alpha=0.65)
+
+        peaks = filtered_data.attrs.get('peaks')
+        if isinstance(peaks, np.ndarray) and peaks.size:
+            peak_times = filtered_data.iloc[peaks]['time']
+            peak_values = filtered_data.iloc[peaks]['gradient.B']
+            window.canvas.axes.scatter(peak_times, peak_values, color='magenta', s=25, label='Detected peaks', zorder=5)
+        else:
+            peaks = None
+
         window.canvas.axes.set_xlabel('Time')
         window.canvas.axes.set_ylabel('Magnetic Field (B)')
         window.canvas.axes.set_title('Magnetocardiogram Visualization')
-        window.canvas.axes.legend()
+        features = filtered_data.attrs.get('features', {})
+        if hasattr(window, 'update_feature_summary'):
+            window.update_feature_summary(features)
+
+        handles, labels = window.canvas.axes.get_legend_handles_labels()
+        if handles:
+            window.canvas.axes.legend(handles, labels)
 
         window.canvas.draw()
         print("Plot updated successfully.")
