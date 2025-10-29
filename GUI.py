@@ -1,12 +1,12 @@
 import os
 from PyQt5.QtCore import Qt, QEvent
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QCheckBox, QLineEdit, QSlider, QSpacerItem, QSizePolicy, \
-    QMessageBox
+    QMessageBox, QComboBox
 from PyQt5.QtGui import QIntValidator, QIcon
 import qtawesome as qta
 from data_processing import load_and_plot_file, update_plot
 from backend import show_controls, validate_input, apply_time_range, update_pan, update_zoom, validate_custom_filter, save_data, state_change, \
-    handle_bandpass_apply_toggle, validate_bandpass_values, handle_filter_toggle
+    handle_bandpass_apply_toggle, validate_bandpass_values, handle_filter_toggle, refresh_plot
 from qtrangeslider import QLabeledDoubleRangeSlider
 from live_visualization import RealTimePlotWindow
 from backend import IMAGES_DIR, DOT_BLACK_PATH, DOT_WHITE_PATH
@@ -32,6 +32,32 @@ class MainWindow(QMainWindow):
         self.data = None
         self.current_time_from = None
         self.current_time_to = None
+        self.sampling_rate = None
+        self.available_channels = []
+        self.primary_channel = None
+        self.reference_channel = None
+        self.lowpass_cutoff = 120.0
+        self.highpass_cutoff = 0.5
+        self.baseline_window_sec = 0.7
+        self.baseline_polyorder = 3
+        self.savgol_window_sec = 0.025
+        self.savgol_polyorder = 3
+        self.processing_profile = "Auto"
+        self.last_detected_profile = None
+        self.hampel_window = 21
+        self.hampel_sigmas = 3.0
+        self.peak_prominence = None
+        self.last_feature_summary = {}
+        self.last_filter_debug = {}
+        self.last_detected_peaks = []
+        self.ecg_overlay_data = None
+        self.ecg_overlay_column = None
+        self.ecg_overlay_sampling_rate = None
+        self.ecg_overlay_baseline_sec = 0.6
+        self.ecg_overlay_baseline_poly = 3
+        self.ecg_overlay_savgol_sec = 0.018
+        self.ecg_overlay_savgol_poly = 3
+        self.last_overlay_debug = {}
 
         self.top_layout = QHBoxLayout()
         self.top_layout.setSpacing(0)
@@ -176,6 +202,33 @@ class MainWindow(QMainWindow):
         self.filters_defined_layout = QVBoxLayout()
         self.filters_defined_layout.addWidget(self.filters_label, alignment=Qt.AlignTop)
 
+        self.channel_label = QLabel("Signal channel")
+        self.filters_defined_layout.addWidget(self.channel_label, alignment=Qt.AlignTop)
+
+        self.channel_selector = QComboBox()
+        self.channel_selector.currentTextChanged.connect(self.on_primary_channel_changed)
+        self.filters_defined_layout.addWidget(self.channel_selector, alignment=Qt.AlignTop)
+
+        self.reference_label = QLabel("Reference channel")
+        self.filters_defined_layout.addWidget(self.reference_label, alignment=Qt.AlignTop)
+
+        self.reference_selector = QComboBox()
+        self.reference_selector.currentTextChanged.connect(self.on_reference_channel_changed)
+        self.filters_defined_layout.addWidget(self.reference_selector, alignment=Qt.AlignTop)
+
+        self.processing_profile_label = QLabel("Processing preset")
+        self.filters_defined_layout.addWidget(self.processing_profile_label, alignment=Qt.AlignTop)
+
+        self.processing_profile_selector = QComboBox()
+        self.processing_profile_selector.addItems([
+            "Auto",
+            "MKG (0.5-120 Hz)",
+            "ECG (5-45 Hz)",
+            "Custom"
+        ])
+        self.processing_profile_selector.currentTextChanged.connect(self.on_processing_profile_changed)
+        self.filters_defined_layout.addWidget(self.processing_profile_selector, alignment=Qt.AlignTop)
+
         self.lowpass_filter = QCheckBox("Lowpass")
         self.lowpass_filter.stateChanged.connect(lambda: handle_filter_toggle(self, 'lowpass'))
         self.filters_defined_layout.addWidget(self.lowpass_filter, alignment=Qt.AlignTop)
@@ -195,6 +248,37 @@ class MainWindow(QMainWindow):
         self.filter_150hz = QCheckBox("150Hz")
         self.filter_150hz.stateChanged.connect(lambda: handle_filter_toggle(self, '150hz'))
         self.filters_defined_layout.addWidget(self.filter_150hz, alignment=Qt.AlignTop)
+
+        self.reference_cancel_checkbox = QCheckBox("Reference cancel")
+        self.reference_cancel_checkbox.stateChanged.connect(lambda: handle_filter_toggle(self, 'reference_cancel'))
+        self.filters_defined_layout.addWidget(self.reference_cancel_checkbox, alignment=Qt.AlignTop)
+
+        self.auto_notch_checkbox = QCheckBox("Auto notch")
+        self.auto_notch_checkbox.setChecked(True)
+        self.auto_notch_checkbox.stateChanged.connect(lambda: handle_filter_toggle(self, 'auto_notch'))
+        self.filters_defined_layout.addWidget(self.auto_notch_checkbox, alignment=Qt.AlignTop)
+
+        self.baseline_remove_checkbox = QCheckBox("Baseline removal")
+        self.baseline_remove_checkbox.setChecked(True)
+        self.baseline_remove_checkbox.stateChanged.connect(lambda: handle_filter_toggle(self, 'baseline'))
+        self.filters_defined_layout.addWidget(self.baseline_remove_checkbox, alignment=Qt.AlignTop)
+
+        self.savgol_smooth_checkbox = QCheckBox("Savgol smoothing")
+        self.savgol_smooth_checkbox.setChecked(False)
+        self.savgol_smooth_checkbox.stateChanged.connect(lambda: handle_filter_toggle(self, 'savgol'))
+        self.filters_defined_layout.addWidget(self.savgol_smooth_checkbox, alignment=Qt.AlignTop)
+
+        self.despike_filter = QCheckBox("Spike cleanup")
+        self.despike_filter.stateChanged.connect(lambda: handle_filter_toggle(self, 'despike'))
+        self.filters_defined_layout.addWidget(self.despike_filter, alignment=Qt.AlignTop)
+
+        self.feature_toggle = QCheckBox("Beat markers")
+        self.feature_toggle.stateChanged.connect(lambda: handle_filter_toggle(self, 'features'))
+        self.filters_defined_layout.addWidget(self.feature_toggle, alignment=Qt.AlignTop)
+        self.ecg_overlay_checkbox = QCheckBox("ECG overlay")
+        self.ecg_overlay_checkbox.setChecked(False)
+        self.ecg_overlay_checkbox.stateChanged.connect(lambda: handle_filter_toggle(self, 'ecg_overlay'))
+        self.filters_defined_layout.addWidget(self.ecg_overlay_checkbox, alignment=Qt.AlignTop)
 
         self.custom_filters_layout = QVBoxLayout()
 
@@ -269,11 +353,24 @@ class MainWindow(QMainWindow):
         self.custom_filters_layout.addLayout(self.bandpass_layout)
 
         self.filters_label.hide()
+        self.channel_label.hide()
+        self.channel_selector.hide()
+        self.reference_label.hide()
+        self.reference_selector.hide()
+        self.processing_profile_label.hide()
+        self.processing_profile_selector.hide()
         self.lowpass_filter.hide()
         self.highpass_filter.hide()
         self.filter_50hz.hide()
         self.filter_100hz.hide()
         self.filter_150hz.hide()
+        self.reference_cancel_checkbox.hide()
+        self.auto_notch_checkbox.hide()
+        self.ecg_overlay_checkbox.hide()
+        self.baseline_remove_checkbox.hide()
+        self.savgol_smooth_checkbox.hide()
+        self.despike_filter.hide()
+        self.feature_toggle.hide()
         self.custom_filter_1_input.hide()
         self.custom_filter_1_apply.hide()
         self.custom_filter_2_input.hide()
@@ -307,6 +404,13 @@ class MainWindow(QMainWindow):
         self.filter_50hz.setStyleSheet(switch_style)
         self.filter_100hz.setStyleSheet(switch_style)
         self.filter_150hz.setStyleSheet(switch_style)
+        self.reference_cancel_checkbox.setStyleSheet(switch_style)
+        self.auto_notch_checkbox.setStyleSheet(switch_style)
+        self.baseline_remove_checkbox.setStyleSheet(switch_style)
+        self.savgol_smooth_checkbox.setStyleSheet(switch_style)
+        self.despike_filter.setStyleSheet(switch_style)
+        self.feature_toggle.setStyleSheet(switch_style)
+        self.ecg_overlay_checkbox.setStyleSheet(switch_style)
         self.custom_filter_1_apply.setStyleSheet(switch_style)
         self.custom_filter_2_apply.setStyleSheet(switch_style)
         self.bandpass_apply.setStyleSheet(switch_style)
@@ -412,6 +516,11 @@ class MainWindow(QMainWindow):
 
         self.layout.addLayout(self.slider_layout)
 
+        self.feature_summary_label = QLabel("")
+        self.feature_summary_label.setStyleSheet("font-size: 12px; color: #2d89ef;")
+        self.feature_summary_label.hide()
+        self.layout.addWidget(self.feature_summary_label, alignment=Qt.AlignLeft)
+
     def start_file_analysis(self):
         load_and_plot_file(self)
 
@@ -447,6 +556,26 @@ class MainWindow(QMainWindow):
         self.custom_filter_1_apply.setChecked(False)
         self.custom_filter_2_input.clear()
         self.custom_filter_2_apply.setChecked(False)
+        self.reference_cancel_checkbox.setChecked(False)
+        self.auto_notch_checkbox.setChecked(True)
+        self.baseline_remove_checkbox.setChecked(True)
+        self.savgol_smooth_checkbox.setChecked(False)
+        self.despike_filter.setChecked(False)
+        self.feature_toggle.setChecked(False)
+        self.ecg_overlay_checkbox.setChecked(False)
+        self.ecg_overlay_checkbox.setVisible(False)
+        self.ecg_overlay_checkbox.setEnabled(False)
+        self.ecg_overlay_data = None
+        self.ecg_overlay_column = None
+        self.ecg_overlay_sampling_rate = None
+        self.last_overlay_debug = {}
+        self.processing_profile_selector.setCurrentIndex(0)
+        self.processing_profile_selector.setEnabled(False)
+        self.auto_notch_checkbox.setEnabled(False)
+        self.baseline_remove_checkbox.setEnabled(False)
+        self.savgol_smooth_checkbox.setEnabled(False)
+        self.processing_profile = "Auto"
+        self.last_detected_profile = None
 
         self.time_from_input.clear()
         self.time_from_input.setStyleSheet("border: 1px solid #ccc; border-radius: 10px;")
@@ -466,6 +595,228 @@ class MainWindow(QMainWindow):
         self.current_time_from = None
         self.current_time_to = None
         self.data = None
+        self.available_channels = []
+        self.primary_channel = None
+        self.reference_channel = None
+        self.channel_selector.clear()
+        self.channel_selector.setEnabled(False)
+        self.reference_selector.clear()
+        self.reference_selector.setEnabled(False)
+        self.reference_label.setEnabled(False)
+        self.reference_cancel_checkbox.setEnabled(False)
+        self.feature_summary_label.hide()
+        self.feature_summary_label.clear()
+
+    def configure_channel_selectors(self, channels):
+        self.available_channels = channels or []
+        self.channel_selector.blockSignals(True)
+        self.reference_selector.blockSignals(True)
+
+        self.channel_selector.clear()
+        self.reference_selector.clear()
+
+        for channel in self.available_channels:
+            self.channel_selector.addItem(channel)
+            self.reference_selector.addItem(channel)
+
+        if self.available_channels:
+            target_primary = self.primary_channel if self.primary_channel in self.available_channels else self.available_channels[0]
+            self.primary_channel = target_primary
+            primary_index = self.channel_selector.findText(target_primary)
+            if primary_index >= 0:
+                self.channel_selector.setCurrentIndex(primary_index)
+
+        enable_reference = len(self.available_channels) > 1
+        self.channel_selector.setEnabled(bool(self.available_channels))
+        self.reference_selector.setEnabled(enable_reference)
+        self.reference_label.setEnabled(enable_reference)
+        self.reference_cancel_checkbox.setEnabled(enable_reference)
+        self.auto_notch_checkbox.setEnabled(bool(self.available_channels))
+        self.processing_profile_selector.setEnabled(bool(self.available_channels))
+        self.baseline_remove_checkbox.setEnabled(bool(self.available_channels))
+        self.savgol_smooth_checkbox.setEnabled(bool(self.available_channels))
+
+        if enable_reference:
+            if self.reference_channel not in self.available_channels or self.reference_channel == self.primary_channel:
+                available_refs = [ch for ch in self.available_channels if ch != self.primary_channel]
+                self.reference_channel = available_refs[0] if available_refs else None
+            if self.reference_channel:
+                ref_index = self.reference_selector.findText(self.reference_channel)
+                if ref_index >= 0:
+                    self.reference_selector.setCurrentIndex(ref_index)
+        else:
+            self.reference_channel = None
+            self.reference_cancel_checkbox.setChecked(False)
+
+        self.channel_selector.blockSignals(False)
+        self.reference_selector.blockSignals(False)
+
+        selection = self.processing_profile_selector.currentText()
+        if selection != "Custom":
+            self.apply_processing_profile_defaults(selection)
+        elif self.data is not None:
+            refresh_plot(self)
+
+    def on_primary_channel_changed(self, channel_name):
+        if not channel_name:
+            return
+        self.primary_channel = channel_name
+        if self.reference_channel == self.primary_channel:
+            self.reference_channel = None
+            self.reference_cancel_checkbox.setChecked(False)
+        if self.processing_profile_selector.currentText() != "Custom":
+            self.apply_processing_profile_defaults(self.processing_profile_selector.currentText())
+        elif self.data is not None:
+            refresh_plot(self)
+
+    def on_reference_channel_changed(self, channel_name):
+        if not channel_name or channel_name == self.primary_channel:
+            self.reference_channel = None
+            if self.reference_cancel_checkbox.isChecked():
+                self.reference_cancel_checkbox.setChecked(False)
+        else:
+            self.reference_channel = channel_name
+        if self.data is not None:
+            refresh_plot(self)
+
+    def on_processing_profile_changed(self, text):
+        if text == "Custom":
+            self.processing_profile = "Custom"
+            return
+        self.apply_processing_profile_defaults(text)
+
+    def get_bandpass_upper_limit(self):
+        fs = self.sampling_rate or getattr(self, 'last_sampling_rate', 480.0)
+        if not fs or fs <= 0:
+            fs = 480.0
+        return min(230.0, max(5.0, 0.49 * fs))
+
+    def set_bandpass_slider_value(self, low, high):
+        previous = self.bandpass_slider.blockSignals(True)
+        self.bandpass_slider.setValue((low, high))
+        validate_bandpass_values(self)
+        self.bandpass_slider.blockSignals(previous)
+
+    @staticmethod
+    def set_checkbox_state(checkbox, checked):
+        if checkbox is None:
+            return
+        previous = checkbox.blockSignals(True)
+        checkbox.setChecked(checked)
+        checkbox.blockSignals(previous)
+
+    def detect_profile_for_channel(self):
+        if not self.primary_channel or self.data is None or self.primary_channel not in self.data.columns:
+            return "MKG (0.5-120 Hz)"
+        name = str(self.primary_channel).lower()
+        series = self.data[self.primary_channel]
+        if "ecg" in name or "reference" in name or "ard" in name:
+            return "ECG (5-45 Hz)"
+        if series.abs().median() > 5 or series.abs().max() > 30:
+            return "ECG (5-45 Hz)"
+        return "MKG (0.5-120 Hz)"
+
+    def apply_processing_profile_defaults(self, profile_option):
+        if profile_option == "Custom":
+            self.processing_profile = "Custom"
+            return
+
+        target = profile_option
+        if profile_option.startswith("Auto"):
+            target = self.detect_profile_for_channel()
+        self.last_detected_profile = target
+        upper = self.get_bandpass_upper_limit()
+
+        if target.startswith("ECG"):
+            low, high = 5.0, min(45.0, upper)
+            self.baseline_window_sec = 0.6
+            self.savgol_window_sec = 0.018
+            self.savgol_polyorder = 3
+            self.set_checkbox_state(self.baseline_remove_checkbox, True)
+            self.set_checkbox_state(self.savgol_smooth_checkbox, True)
+        elif target.startswith("MKG"):
+            low, high = 0.5, min(120.0, upper)
+            self.baseline_window_sec = 0.8
+            self.savgol_window_sec = 0.025
+            self.savgol_polyorder = 3
+            self.set_checkbox_state(self.baseline_remove_checkbox, True)
+            self.set_checkbox_state(self.savgol_smooth_checkbox, False)
+        else:
+            self.processing_profile = "Custom"
+            return
+
+        self.processing_profile = target
+        self.set_checkbox_state(self.auto_notch_checkbox, True)
+
+        self.set_checkbox_state(self.lowpass_filter, False)
+        self.set_checkbox_state(self.highpass_filter, False)
+        self.set_checkbox_state(self.bandpass_apply, True)
+        self.set_bandpass_slider_value(low, high)
+
+        if self.data is not None:
+            refresh_plot(self)
+
+    def update_feature_summary(self, features):
+        self.last_feature_summary = features or {}
+        parts = []
+
+        if features:
+            heart_rate = features.get("heart_rate_bpm")
+            if heart_rate:
+                parts.append(f"HR {heart_rate:.1f} bpm")
+            rr_mean = features.get("rr_mean")
+            if rr_mean:
+                parts.append(f"RR mean {rr_mean:.3f}s")
+            rr_std = features.get("rr_std")
+            if rr_std:
+                parts.append(f"RR std {rr_std:.3f}s")
+
+        line_info = getattr(self, "last_filter_debug", None)
+        if isinstance(line_info, dict):
+            power_info = line_info.get("line_power", {})
+            pre = power_info.get("pre", {}) if isinstance(power_info, dict) else {}
+            post = power_info.get("post", {}) if isinstance(power_info, dict) else {}
+            for freq in sorted(pre.keys()):
+                if freq not in post:
+                    continue
+                pre_val = pre.get(freq, 0.0)
+                post_val = post.get(freq, 0.0)
+                if pre_val <= 0:
+                    continue
+                ratio = pre_val / max(post_val, 1e-12)
+                label = f"{int(round(freq))}Hz"
+                if ratio >= 1.05:
+                    parts.append(f"{label} x{ratio:.1f}")
+                elif ratio > 0:
+                    parts.append(f"{label} x{ratio:.2f}")
+            auto_notches = line_info.get("auto_notches")
+            if auto_notches:
+                parts.append("Auto notch " + ", ".join(f"{freq:.1f}Hz" for freq in auto_notches))
+
+        overlay_info = getattr(self, "last_overlay_debug", None)
+        if isinstance(overlay_info, dict):
+            power_info = overlay_info.get("line_power", {})
+            pre = power_info.get("pre", {}) if isinstance(power_info, dict) else {}
+            post = power_info.get("post", {}) if isinstance(power_info, dict) else {}
+            for freq in sorted(pre.keys()):
+                if freq not in post:
+                    continue
+                pre_val = pre.get(freq, 0.0)
+                post_val = post.get(freq, 0.0)
+                if pre_val <= 0:
+                    continue
+                ratio = pre_val / max(post_val, 1e-12)
+                label = f"ECG {int(round(freq))}Hz"
+                if ratio >= 1.05:
+                    parts.append(f"{label} x{ratio:.1f}")
+                elif ratio > 0:
+                    parts.append(f"{label} x{ratio:.2f}")
+        if parts:
+            self.feature_summary_label.setText(" | ".join(parts))
+            self.feature_summary_label.show()
+        else:
+            self.feature_summary_label.clear()
+            self.feature_summary_label.hide()
 
     def change_theme(self, state):
         if state == 2:
